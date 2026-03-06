@@ -1,15 +1,21 @@
 {
     "name": "butterfly",
     "version": "1.0.0",
-    "description": "Minimal Pronote web client powered by Pawnote",
+    "description": "Minimal Pronote client powered by Pawnote",
     "type": "module",
     "scripts": {
-        "dev": "vercel dev"
+        "dev": "vercel dev",
+        "tauri": "tauri",
+        "tauri:dev": "tauri dev",
+        "tauri:build": "tauri build",
+        "build:sidecar": "npm run build:linux --prefix server",
+        "build:icons": "tauri icon assets/icon.svg --output src-tauri/icons",
+        "postinstall": "npm install --prefix server"
     },
     "dependencies": {
         "pawnote": "latest"
     },
     "devDependencies": {
-        "vercel": "latest"
+        "@tauri-apps/cli": "^2"
     }
 }

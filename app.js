@@ -1,6 +1,12 @@
 (() => {
 const SESSION_KEY = "butterfly_session";
 
+// When running as a Tauri desktop app, the API is served by the Node.js sidecar
+// on a fixed local port.  In the browser (Vercel), relative paths work fine.
+const API_BASE = (typeof window !== "undefined" && window.__TAURI_INTERNALS__)
+    ? "http://127.0.0.1:47291"
+    : "";
+
 function getSession() {
     try {
         const raw = sessionStorage.getItem(SESSION_KEY);
@@ -28,7 +34,7 @@ function requireAuth() {
 }
 
 async function apiPost(endpoint, body) {
-    const res = await fetch(endpoint, {
+    const res = await fetch(API_BASE + endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
@@ -345,6 +351,7 @@ function buildGradesHtml(overviewData, session) {
 }
 
 window.ButterflyApp = {
+    API_BASE,
     getSession,
     setSession,
     clearSession,

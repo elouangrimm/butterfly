@@ -1,0 +1,104 @@
+name: Build Butterfly
+
+on:
+  push:
+    branches: [main]
+    tags:     ["v*"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-linux:
+    name: Build — Linux (.deb)
+    runs-on: ubuntu-22.04
+
+    steps:
+      # ── Checkout ─────────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── System dependencies required by WebKitGTK / Tauri ────────────────────
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libsoup-3.0-dev \
+            libssl-dev \
+            patchelf \
+            imagemagick \
+            inkscape
+
+      # ── Rust toolchain ────────────────────────────────────────────────────────
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artefacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # ── Node.js ───────────────────────────────────────────────────────────────
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # ── Install root dependencies (pawnote, vercel dev, etc.) ─────────────────
+      - name: Install root npm dependencies
+        run: npm ci
+
+      # ── Install server/ dependencies (express + pawnote for sidecar) ──────────
+      - name: Install server npm dependencies
+        run: npm ci
+        working-directory: server
+
+      # ── Generate Tauri icon set from SVG ──────────────────────────────────────
+      - name: Generate icon PNG from SVG
+        run: |
+          mkdir -p /tmp/icon-gen
+          inkscape --export-type=png --export-filename=/tmp/icon-gen/icon-1024.png \
+            --export-width=1024 --export-height=1024 assets/icon.svg
+
+      - name: Generate all Tauri icon sizes
+        run: |
+          npx @tauri-apps/cli icon /tmp/icon-gen/icon-1024.png \
+            --output src-tauri/icons
+
+      # ── Build the Node.js API sidecar with pkg ────────────────────────────────
+      - name: Build butterfly-server sidecar (Linux x64)
+        run: npm run build:linux
+        working-directory: server
+
+      # ── Verify the sidecar binary exists with the correct target-triple name ──
+      - name: Verify sidecar binary
+        run: |
+          ls -lh src-tauri/binaries/
+          file src-tauri/binaries/butterfly-server-x86_64-unknown-linux-gnu
+
+      # ── Build the Tauri app (produces .deb via tauri-apps/tauri-action) ───────
+      - name: Build Tauri application
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName:       ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          releaseName:   "Butterfly ${{ github.ref_name }}"
+          releaseBody:   "See CHANGELOG or commits for details."
+          releaseDraft:  false
+          prerelease:    false
+          # Only produce a GitHub Release on tag pushes; on branch pushes just build
+          # (tauri-action skips release creation when tagName is empty)
+
+      # ── Upload .deb as workflow artifact (available on every push) ────────────
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: butterfly-linux-deb
+          path: src-tauri/target/release/bundle/deb/*.deb
+          if-no-files-found: error
+          retention-days: 30

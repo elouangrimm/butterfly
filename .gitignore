@@ -1,1 +1,15 @@
 node_modules
+server/node_modules
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# Compiled sidecar binaries (built in CI or locally before tauri build)
+src-tauri/binaries/
+
+# Tauri icons (generated from assets/icon.svg via `npm run build:icons`)
+src-tauri/icons/
+
+# Vercel
+.vercel

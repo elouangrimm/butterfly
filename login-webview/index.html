@@ -266,14 +266,17 @@ function getParam(name) {
     return new URLSearchParams(window.location.search).get(name);
 }
 
+// ── environment detection ─────────────────────────────────────────────────────
+// window.__TAURI_INTERNALS__ is injected by Tauri into every WebviewWindow
+const IS_TAURI = typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__;
+const API_BASE = IS_TAURI ? 'http://127.0.0.1:47291' : '';
+
 // ── state ─────────────────────────────────────────────────────────────────────
 const pronoteURL = getParam('pronoteURL') || getParam('url') || '';
 let deviceUUID = localStorage.getItem('butterfly_device_uuid') || crypto.randomUUID();
 localStorage.setItem('butterfly_device_uuid', deviceUUID);
 
-let proxyCookies = {};   // current cookie jar
-let currentUrl = '';     // current URL shown in iframe
-
+let proxyCookies = {};
 const iframe = qs('#loginFrame');
 
 if (!pronoteURL) {
@@ -297,71 +300,7 @@ function resetSteps() {
     qs('#step1').querySelector('.step-icon').textContent = '◐';
 }
 
-// ── proxy helpers ──────────────────────────────────────────────────────────────
-async function proxyFetch(url, method, body) {
-    const res = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            url,
-            method: method || 'GET',
-            body: body || '',
-            cookies: proxyCookies,
-            uuid: deviceUUID
-        })
-    });
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-        throw new Error(err.error || `Proxy error ${res.status}`);
-    }
-
-    // Update cookie jar from response header
-    const cookiesB64 = res.headers.get('X-Proxy-Cookies');
-    if (cookiesB64) {
-        try {
-            const merged = JSON.parse(atob(cookiesB64));
-            proxyCookies = { ...proxyCookies, ...merged };
-        } catch {}
-    }
-
-    const finalUrl = res.headers.get('X-Proxy-Final-Url') || url;
-    const html = await res.text();
-    return { html, finalUrl };
-}
-
-// ── navigate inside the iframe ─────────────────────────────────────────────────
-async function navigateTo(url, method, body) {
-    setDot('loading');
-    setUrl(url);
-    currentUrl = url;
-
-    try {
-        const { html, finalUrl } = await proxyFetch(url, method, body);
-        currentUrl = finalUrl;
-        setUrl(finalUrl);
-        iframe.srcdoc = html;
-    } catch (err) {
-        showError('Erreur de navigation : ' + err.message);
-    } finally {
-        setDot('ok');
-    }
-}
-
-// ── listen for messages from the injected iframe scripts ───────────────────────
-window.addEventListener('message', async (event) => {
-    if (!event.data || typeof event.data !== 'object') return;
-    const { type, data, url, method, body } = event.data;
-
-    if (type === 'navigate') {
-        await navigateTo(url, method || 'GET', body || '');
-    }
-
-    if (type === 'loginState') {
-        await handleLoginState(data);
-    }
-});
-
-// ── handle PRONOTE loginState ─────────────────────────────────────────────────
+// ── finalise auth (common to both Tauri and browser modes) ────────────────────
 async function handleLoginState(loginState) {
     if (!loginState || !loginState.mdp) return;
     if (loginState.status !== 0) {
@@ -369,29 +308,21 @@ async function handleLoginState(loginState) {
         return;
     }
 
-    // Show success overlay while we finalise
     qs('#successOverlay').classList.add('visible');
     qs('#successSub').textContent = 'Finalisation de la session Pawnote…';
     setDot('loading');
 
     try {
-        const res = await fetch('/api/login-webview', {
+        const res = await fetch(API_BASE + '/api/login-webview', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                login: loginState.login,
-                mdp: loginState.mdp,
-                pronoteURL,
-                deviceUUID
-            })
+            body: JSON.stringify({ login: loginState.login, mdp: loginState.mdp, pronoteURL, deviceUUID })
         });
 
         const result = await res.json();
         if (!res.ok) throw new Error(result.error || 'Authentification échouée');
 
-        // Store session
-        const SESSION_KEY = 'butterfly_session';
-        sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+        sessionStorage.setItem('butterfly_session', JSON.stringify({
             auth: result.auth,
             studentName: result.studentName,
             schoolName: result.schoolName,
@@ -402,7 +333,6 @@ async function handleLoginState(loginState) {
 
         qs('#successSub').textContent = `Bienvenue, ${result.studentName || loginState.libelle || loginState.login} !`;
         setDot('ok');
-
         setTimeout(() => { window.location.href = '/grades/'; }, 900);
     } catch (err) {
         qs('#successOverlay').classList.remove('visible');
@@ -410,16 +340,111 @@ async function handleLoginState(loginState) {
     }
 }
 
-// ── init flow ──────────────────────────────────────────────────────────────────
-async function init() {
-    if (!pronoteURL) return;
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// TAURI MODE — native WebviewWindow handles all cookie injection + JS hooks
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async function initTauri() {
+    const { invoke } = window.__TAURI__.core;
+    const { listen }  = window.__TAURI__.event;
 
     try {
-        // Step 1: proxy-init — fetch InfoMobileApp.json, build initial cookies
+        // Step 1: fetch InfoMobileApp.json via the local sidecar
         setStep('step1', 'active', 'Récupération des informations de connexion…');
         setUrl(pronoteURL);
 
-        const initRes = await fetch('/api/proxy-init', {
+        const initRes = await fetch(API_BASE + '/api/proxy-init', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pronoteURL, deviceUUID })
+        });
+        const initData = await initRes.json();
+        if (!initRes.ok) throw new Error(initData.error || 'proxy-init failed');
+
+        const jetonCAS = initData.hasCAS ? (initData.cookies?.validationAppliMobile ?? null) : null;
+
+        setStep('step1', 'done');
+        setStep('step2', 'active', 'Ouverture de la fenêtre EduConnect…');
+        setUrl('Ouverture de la fenêtre de connexion…');
+
+        // Step 2: subscribe to the login-state event BEFORE opening the window
+        //   (Rust emits 'login-state' once butterfly://auth is navigated to)
+        const unlisten = await listen('login-state', async (event) => {
+            await unlisten(); // one-shot
+            try {
+                const loginState = JSON.parse(event.payload);
+                await handleLoginState(loginState);
+            } catch (err) {
+                showError('Erreur de décodage du résultat de connexion : ' + err.message);
+            }
+        });
+
+        // Step 3: open the native Tauri WebviewWindow with all init scripts
+        //   Rust injects cookies, sets the PRONOTE hooks, and polls loginState
+        await invoke('open_auth_webview', {
+            pronoteUrl: pronoteURL,
+            deviceUuid: deviceUUID,
+            jetonCas:   jetonCAS
+        });
+
+        setStep('step2', 'done');
+        setStep('step3', 'active', 'Connectez-vous dans la fenêtre EduConnect…');
+        setUrl('En attente de l\'authentification…');
+        setDot('ok');
+
+        // Update step 3 once authentication succeeds (handleLoginState runs)
+    } catch (err) {
+        showError(err.message);
+    }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// BROWSER MODE — proxy the PRONOTE pages into an iframe (original approach)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async function proxyFetch(url, method, body) {
+    const res = await fetch(API_BASE + '/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, method: method || 'GET', body: body || '', cookies: proxyCookies, uuid: deviceUUID })
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(err.error || `Proxy error ${res.status}`);
+    }
+    const cookiesB64 = res.headers.get('X-Proxy-Cookies');
+    if (cookiesB64) {
+        try { proxyCookies = { ...proxyCookies, ...JSON.parse(atob(cookiesB64)) }; } catch {}
+    }
+    const finalUrl = res.headers.get('X-Proxy-Final-Url') || url;
+    return { html: await res.text(), finalUrl };
+}
+
+async function navigateTo(url, method, body) {
+    setDot('loading');
+    setUrl(url);
+    try {
+        const { html, finalUrl } = await proxyFetch(url, method, body);
+        setUrl(finalUrl);
+        iframe.srcdoc = html;
+    } catch (err) {
+        showError('Erreur de navigation : ' + err.message);
+    } finally {
+        setDot('ok');
+    }
+}
+
+window.addEventListener('message', async (event) => {
+    if (!event.data || typeof event.data !== 'object') return;
+    const { type, data, url, method, body } = event.data;
+    if (type === 'navigate')   await navigateTo(url, method || 'GET', body || '');
+    if (type === 'loginState') await handleLoginState(data);
+});
+
+async function initBrowser() {
+    try {
+        setStep('step1', 'active', 'Récupération des informations de connexion…');
+        setUrl(pronoteURL);
+
+        const initRes = await fetch(API_BASE + '/api/proxy-init', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ pronoteURL, deviceUUID })
@@ -433,34 +458,33 @@ async function init() {
         setStep('step1', 'done');
         setStep('step2', 'active', 'Initialisation de la session mobile…');
 
-        // Step 2: fetch the mobile PRONOTE page through proxy
         const { html, finalUrl } = await proxyFetch(mobileUrl, 'GET');
-        currentUrl = finalUrl;
 
         setStep('step2', 'done');
         setStep('step3', 'active', 'Ouverture de la page de connexion…');
 
-        // Step 3: show iframe
         iframe.srcdoc = html;
         iframe.classList.add('visible');
-        showScreen('screenDone'); // hide loading screen
-        qs('#loginFrame').style.display = 'block';
-        // Hide all screens to reveal the iframe
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible'));
-
         setUrl(finalUrl);
         setDot('ok');
         setStep('step3', 'done', 'Connectez-vous via EduConnect dans le cadre ci-dessous');
-
-        // When iframe loads (after srcdoc set), hide loading
         iframe.addEventListener('load', () => setDot('ok'), { once: true });
-
     } catch (err) {
         showError(err.message);
     }
 }
 
-// Kick off
+// ── dispatch ──────────────────────────────────────────────────────────────────
+function init() {
+    if (!pronoteURL) return;
+    if (IS_TAURI) {
+        initTauri();
+    } else {
+        initBrowser();
+    }
+}
+
 if (pronoteURL) init();
 </script>
 </body>
