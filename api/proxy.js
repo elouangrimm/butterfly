@@ -149,11 +149,17 @@ export default async function handler(req, res) {
         if (contentType.includes('text/html')) {
             let html = await response.text();
 
-            // Inject hook part 1 (needs to be BEFORE page scripts)
+            // Build a <base> tag so relative asset URLs (CSS, JS, images) resolve
+            // against the PRONOTE server, not butterfly's domain.
+            const baseDir = finalBase.origin + finalBase.pathname.substring(0, finalBase.pathname.lastIndexOf('/') + 1);
+            const baseTag = html.includes('<base ') ? '' : `<base href="${baseDir}">`;
+
+            // Inject hook part 1 + base tag (needs to be BEFORE page scripts)
+            const headInject = baseTag + HOOK_SCRIPT_PART1(uuid, deviceJson);
             if (html.includes('<head>')) {
-                html = html.replace('<head>', '<head>' + HOOK_SCRIPT_PART1(uuid, deviceJson));
+                html = html.replace('<head>', '<head>' + headInject);
             } else if (html.includes('<html>')) {
-                html = html.replace('<html>', '<html>' + HOOK_SCRIPT_PART1(uuid, deviceJson));
+                html = html.replace('<html>', '<html>' + headInject);
             }
 
             // Inject hook part 2 + nav interceptor before </body>
