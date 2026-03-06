@@ -29,16 +29,15 @@ export default async function handler(req, res) {
             }
         });
 
-        if (!infoRes.ok) {
-            return res.status(502).json({ error: `InfoMobileApp.json responded with ${infoRes.status}` });
-        }
-
         let infoJson = null;
-        try {
-            infoJson = await infoRes.json();
-        } catch {
-            // Non-JSON response — school might not expose this endpoint
+        if (infoRes.ok) {
+            try {
+                infoJson = await infoRes.json();
+            } catch {
+                // Non-JSON response — treat as no CAS
+            }
         }
+        // 404 / any non-ok status → school doesn't expose this endpoint, continue without CAS
 
         const jetonCAS = infoJson?.CAS?.jetonCAS ?? null;
         const uuid = deviceUUID || crypto.randomUUID();
