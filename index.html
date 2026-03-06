@@ -78,6 +78,24 @@
                 Vos identifiants ne sont jamais stockés. Seul un jeton de session temporaire est conservé.
             </div>
         </form>
+
+        <!-- EduConnect / e-lyco alternative login -->
+        <div style="border-top:1px solid var(--border-strong);padding:20px 28px;display:flex;flex-direction:column;gap:12px">
+            <div style="font-family:var(--font-mono);font-size:0.7rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.07em">
+                Connexion SSO
+            </div>
+            <button
+                class="btn"
+                id="educonnectBtn"
+                style="width:100%;justify-content:center;border-color:var(--border-strong);gap:8px"
+                title="Pour les établissements utilisant e-lyco, EduConnect ou un CAS"
+            >
+                <span>🏫</span> Se connecter via EduConnect / e-lyco
+            </button>
+            <div style="font-family:var(--font-mono);font-size:0.68rem;color:var(--text-faint);line-height:1.5">
+                Pour les établissements utilisant un SSO (e-lyco, EduConnect, CAS…). Saisissez l'URL Pronote ci-dessus puis cliquez.
+            </div>
+        </div>
     </div>
 </div>
 
@@ -100,6 +118,17 @@ function showFormError(msg) {
 function hideFormError() {
     errorEl.style.display = "none";
 }
+
+// EduConnect button — reads URL field and redirects to WebView login
+document.getElementById("educonnectBtn").addEventListener("click", () => {
+    const pronoteURL = document.getElementById("pronoteURL").value.trim();
+    if (!pronoteURL) {
+        showFormError("Saisissez d'abord l'URL Pronote de votre établissement.");
+        document.getElementById("pronoteURL").focus();
+        return;
+    }
+    window.location.href = "/login-webview/?pronoteURL=" + encodeURIComponent(pronoteURL);
+});
 
 form.addEventListener("submit", async (e) => {
     e.preventDefault();

@@ -1,3 +1,4 @@
+(() => {
 const SESSION_KEY = "butterfly_session";
 
 function getSession() {
@@ -369,3 +370,4 @@ window.ButterflyApp = {
     buildGradesMarkdown,
     buildGradesHtml
 };
+})();

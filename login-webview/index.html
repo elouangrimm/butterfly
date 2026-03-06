@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <title>Butterfly — Connexion via EduConnect</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🦋</text></svg>">
+    <style>
+        :root {
+            --stone-950: #0c0a09;
+            --stone-900: #1c1917;
+            --stone-800: #292524;
+            --stone-700: #44403c;
+            --stone-600: #57534e;
+            --stone-500: #78716c;
+            --stone-400: #a8a29e;
+            --stone-200: #e7e5e4;
+            --stone-100: #f5f5f4;
+            --blue: #3b82f6;
+            --red: #ef4444;
+            --green: #22c55e;
+            --amber: #f59e0b;
+            --bg: var(--stone-950);
+            --bg-raised: var(--stone-900);
+            --bg-surface: var(--stone-800);
+            --border: var(--stone-800);
+            --border-strong: var(--stone-600);
+            --text: var(--stone-200);
+            --text-muted: var(--stone-400);
+            --text-faint: var(--stone-500);
+            --text-bright: var(--stone-100);
+            --accent: var(--blue);
+            --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
+            --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; border-radius: 0 !important; }
+        body { background: var(--bg); color: var(--text); font-family: var(--font-sans); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* ── top bar ── */
+        .top-bar {
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 0 16px;
+            height: 48px;
+            background: var(--bg-raised);
+            border-bottom: 1px solid var(--border);
+        }
+        .top-bar-brand {
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: var(--text-bright);
+            text-decoration: none;
+            white-space: nowrap;
+        }
+        .url-pill {
+            flex: 1;
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            color: var(--text-faint);
+            background: var(--bg-surface);
+            border: 1px solid var(--border-strong);
+            padding: 5px 10px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            flex-shrink: 0;
+            background: var(--text-faint);
+        }
+        .status-dot.loading { background: var(--amber); animation: pulse 1s ease-in-out infinite; }
+        .status-dot.ok { background: var(--green); }
+        .status-dot.error { background: var(--red); }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+        /* ── main area ── */
+        .main-area {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* ── status screens ── */
+        .screen {
+            position: absolute;
+            inset: 0;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            padding: 32px;
+        }
+        .screen.visible { display: flex; }
+
+        .screen-title {
+            font-family: var(--font-mono);
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-bright);
+        }
+        .screen-sub {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--text-faint);
+            text-align: center;
+            max-width: 380px;
+            line-height: 1.6;
+        }
+        .spinner {
+            width: 32px; height: 32px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            animation: spin 0.65s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .progress-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            width: 100%;
+            max-width: 360px;
+        }
+        .step {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            color: var(--text-faint);
+        }
+        .step.active { color: var(--text); }
+        .step.done { color: var(--green); }
+        .step.error { color: var(--red); }
+        .step-icon { font-size: 0.7rem; width: 16px; text-align: center; flex-shrink: 0; }
+
+        .btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 8px 16px;
+            font-family: var(--font-mono); font-size: 0.8rem; font-weight: 600;
+            border: 1px solid var(--border-strong);
+            background: transparent; color: var(--text-muted);
+            cursor: pointer; text-decoration: none;
+            transition: background-color 0.15s, color 0.15s;
+        }
+        .btn:hover { background: var(--bg-surface); color: var(--text); }
+        .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .btn-primary:hover { background: #5193f8; border-color: #5193f8; color: #fff; }
+
+        .error-box {
+            background: rgba(239,68,68,.08);
+            border: 1px solid rgba(239,68,68,.3);
+            color: var(--red);
+            padding: 12px 16px;
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            max-width: 400px;
+            line-height: 1.5;
+        }
+
+        /* ── the embedded frame ── */
+        #loginFrame {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: none;
+            background: #fff;
+        }
+        #loginFrame.visible { display: block; }
+
+        /* ── success overlay ── */
+        .success-overlay {
+            position: absolute; inset: 0;
+            background: rgba(12,10,9,.92);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            z-index: 100;
+        }
+        .success-overlay.visible { display: flex; }
+        .success-icon { font-size: 3rem; }
+        .success-title { font-family: var(--font-mono); font-size: 1.1rem; color: var(--green); }
+        .success-sub { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-faint); }
+    </style>
+</head>
+<body>
+
+<div class="top-bar">
+    <a href="/" class="top-bar-brand">🦋 butterfly</a>
+    <div class="url-pill" id="urlPill">Initialisation…</div>
+    <div class="status-dot loading" id="statusDot"></div>
+</div>
+
+<div class="main-area">
+    <!-- Loading screen -->
+    <div class="screen visible" id="screenLoading">
+        <div class="spinner"></div>
+        <div class="screen-title">Connexion via EduConnect</div>
+        <div class="progress-steps" id="progressSteps">
+            <div class="step active" id="step1"><span class="step-icon">◐</span>Récupération des informations de connexion…</div>
+            <div class="step" id="step2"><span class="step-icon">○</span>Initialisation de la session mobile…</div>
+            <div class="step" id="step3"><span class="step-icon">○</span>Ouverture de la page EduConnect…</div>
+        </div>
+    </div>
+
+    <!-- Error screen -->
+    <div class="screen" id="screenError">
+        <div class="screen-title" style="color:var(--red)">Erreur de connexion</div>
+        <div class="error-box" id="errorMsg">—</div>
+        <div style="display:flex;gap:10px">
+            <a href="/" class="btn">← Retour</a>
+            <button class="btn btn-primary" id="retryBtn">Réessayer</button>
+        </div>
+    </div>
+
+    <!-- The PRONOTE / EduConnect iframe -->
+    <iframe
+        id="loginFrame"
+        sandbox="allow-scripts allow-forms allow-popups allow-same-origin"
+        title="Connexion PRONOTE"
+    ></iframe>
+
+    <!-- Success overlay -->
+    <div class="success-overlay" id="successOverlay">
+        <div class="success-icon">🦋</div>
+        <div class="success-title">Connecté !</div>
+        <div class="success-sub" id="successSub">Redirection vers vos notes…</div>
+        <div class="spinner"></div>
+    </div>
+</div>
+
+<script>
+// ── helpers ──────────────────────────────────────────────────────────────────
+function qs(s) { return document.querySelector(s); }
+function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible'));
+    qs('#' + id)?.classList.add('visible');
+}
+function setStep(id, state, text) {
+    const el = qs('#' + id);
+    if (!el) return;
+    el.className = 'step ' + state;
+    const icons = { active: '◐', done: '✓', error: '✗', '': '○' };
+    el.querySelector('.step-icon').textContent = icons[state] ?? '○';
+    if (text) el.childNodes[el.childNodes.length - 1].textContent = text;
+}
+function setUrl(url) { qs('#urlPill').textContent = url; }
+function setDot(state) { qs('#statusDot').className = 'status-dot ' + state; }
+
+function showError(msg) {
+    qs('#errorMsg').textContent = msg;
+    showScreen('screenError');
+    setDot('error');
+}
+
+function getParam(name) {
+    return new URLSearchParams(window.location.search).get(name);
+}
+
+// ── state ─────────────────────────────────────────────────────────────────────
+const pronoteURL = getParam('pronoteURL') || getParam('url') || '';
+let deviceUUID = localStorage.getItem('butterfly_device_uuid') || crypto.randomUUID();
+localStorage.setItem('butterfly_device_uuid', deviceUUID);
+
+let proxyCookies = {};   // current cookie jar
+let currentUrl = '';     // current URL shown in iframe
+
+const iframe = qs('#loginFrame');
+
+if (!pronoteURL) {
+    showError('Aucune URL Pronote fournie. Retournez à la page de connexion.');
+}
+
+// ── retry ─────────────────────────────────────────────────────────────────────
+qs('#retryBtn').addEventListener('click', () => {
+    showScreen('screenLoading');
+    setDot('loading');
+    resetSteps();
+    init();
+});
+
+function resetSteps() {
+    ['step1','step2','step3'].forEach(id => {
+        const el = qs('#' + id);
+        if (el) { el.className = 'step'; el.querySelector('.step-icon').textContent = '○'; }
+    });
+    qs('#step1').className = 'step active';
+    qs('#step1').querySelector('.step-icon').textContent = '◐';
+}
+
+// ── proxy helpers ──────────────────────────────────────────────────────────────
+async function proxyFetch(url, method, body) {
+    const res = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            url,
+            method: method || 'GET',
+            body: body || '',
+            cookies: proxyCookies,
+            uuid: deviceUUID
+        })
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(err.error || `Proxy error ${res.status}`);
+    }
+
+    // Update cookie jar from response header
+    const cookiesB64 = res.headers.get('X-Proxy-Cookies');
+    if (cookiesB64) {
+        try {
+            const merged = JSON.parse(atob(cookiesB64));
+            proxyCookies = { ...proxyCookies, ...merged };
+        } catch {}
+    }
+
+    const finalUrl = res.headers.get('X-Proxy-Final-Url') || url;
+    const html = await res.text();
+    return { html, finalUrl };
+}
+
+// ── navigate inside the iframe ─────────────────────────────────────────────────
+async function navigateTo(url, method, body) {
+    setDot('loading');
+    setUrl(url);
+    currentUrl = url;
+
+    try {
+        const { html, finalUrl } = await proxyFetch(url, method, body);
+        currentUrl = finalUrl;
+        setUrl(finalUrl);
+        iframe.srcdoc = html;
+    } catch (err) {
+        showError('Erreur de navigation : ' + err.message);
+    } finally {
+        setDot('ok');
+    }
+}
+
+// ── listen for messages from the injected iframe scripts ───────────────────────
+window.addEventListener('message', async (event) => {
+    if (!event.data || typeof event.data !== 'object') return;
+    const { type, data, url, method, body } = event.data;
+
+    if (type === 'navigate') {
+        await navigateTo(url, method || 'GET', body || '');
+    }
+
+    if (type === 'loginState') {
+        await handleLoginState(data);
+    }
+});
+
+// ── handle PRONOTE loginState ─────────────────────────────────────────────────
+async function handleLoginState(loginState) {
+    if (!loginState || !loginState.mdp) return;
+    if (loginState.status !== 0) {
+        showError('PRONOTE a signalé une erreur de connexion (status ' + loginState.status + ').');
+        return;
+    }
+
+    // Show success overlay while we finalise
+    qs('#successOverlay').classList.add('visible');
+    qs('#successSub').textContent = 'Finalisation de la session Pawnote…';
+    setDot('loading');
+
+    try {
+        const res = await fetch('/api/login-webview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                login: loginState.login,
+                mdp: loginState.mdp,
+                pronoteURL,
+                deviceUUID
+            })
+        });
+
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || 'Authentification échouée');
+
+        // Store session
+        const SESSION_KEY = 'butterfly_session';
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+            auth: result.auth,
+            studentName: result.studentName,
+            schoolName: result.schoolName,
+            periods: result.periods,
+            defaultPeriodId: result.defaultPeriodId,
+            tabs: result.tabs
+        }));
+
+        qs('#successSub').textContent = `Bienvenue, ${result.studentName || loginState.libelle || loginState.login} !`;
+        setDot('ok');
+
+        setTimeout(() => { window.location.href = '/grades/'; }, 900);
+    } catch (err) {
+        qs('#successOverlay').classList.remove('visible');
+        showError('Erreur lors de la finalisation : ' + err.message);
+    }
+}
+
+// ── init flow ──────────────────────────────────────────────────────────────────
+async function init() {
+    if (!pronoteURL) return;
+
+    try {
+        // Step 1: proxy-init — fetch InfoMobileApp.json, build initial cookies
+        setStep('step1', 'active', 'Récupération des informations de connexion…');
+        setUrl(pronoteURL);
+
+        const initRes = await fetch('/api/proxy-init', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pronoteURL, deviceUUID })
+        });
+        const initData = await initRes.json();
+        if (!initRes.ok) throw new Error(initData.error || 'proxy-init failed');
+
+        proxyCookies = initData.cookies || {};
+        const mobileUrl = initData.mobileUrl;
+
+        setStep('step1', 'done');
+        setStep('step2', 'active', 'Initialisation de la session mobile…');
+
+        // Step 2: fetch the mobile PRONOTE page through proxy
+        const { html, finalUrl } = await proxyFetch(mobileUrl, 'GET');
+        currentUrl = finalUrl;
+
+        setStep('step2', 'done');
+        setStep('step3', 'active', 'Ouverture de la page de connexion…');
+
+        // Step 3: show iframe
+        iframe.srcdoc = html;
+        iframe.classList.add('visible');
+        showScreen('screenDone'); // hide loading screen
+        qs('#loginFrame').style.display = 'block';
+        // Hide all screens to reveal the iframe
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible'));
+
+        setUrl(finalUrl);
+        setDot('ok');
+        setStep('step3', 'done', 'Connectez-vous via EduConnect dans le cadre ci-dessous');
+
+        // When iframe loads (after srcdoc set), hide loading
+        iframe.addEventListener('load', () => setDot('ok'), { once: true });
+
+    } catch (err) {
+        showError(err.message);
+    }
+}
+
+// Kick off
+if (pronoteURL) init();
+</script>
+</body>
+</html>
