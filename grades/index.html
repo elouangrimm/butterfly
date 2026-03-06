@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="description" content="Notes et moyennes Pronote">
+    <meta name="author" content="Elouan Grimm">
+
+    <meta property="og:title" content="Butterfly — Notes">
+    <meta property="og:description" content="Vos notes Pronote avec graphiques et historique.">
+    <meta property="og:type" content="website">
+
+    <title>Butterfly — Notes</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🦋</text></svg>">
+    <link rel="stylesheet" href="../style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div class="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text">Chargement des notes…</div>
+</div>
+
+<nav class="nav">
+    <a href="/" class="nav-brand">🦋 butterfly</a>
+    <ul class="nav-links"></ul>
+    <div class="nav-right">
+        <span class="nav-user"></span>
+        <button class="btn btn-sm btn-ghost btn-logout">Déconnexion</button>
+    </div>
+</nav>
+
+<main class="main">
+    <div class="page-header">
+        <div>
+            <h1>Notes</h1>
+            <div class="subtitle" id="periodLabel">—</div>
+        </div>
+        <div class="page-actions">
+            <div class="period-selector">
+                <label for="periodSelect">Trimestre</label>
+                <select class="select-input" id="periodSelect"></select>
+            </div>
+
+            <div class="export-menu" id="exportMenu">
+                <button class="btn btn-sm" id="exportBtn">Exporter ▾</button>
+                <div class="export-dropdown" id="exportDropdown">
+                    <button class="export-option" data-action="json">JSON <span class="format-tag">LLM · données brutes</span></button>
+                    <button class="export-option" data-action="markdown">Markdown <span class="format-tag">LLM · rapport structuré</span></button>
+                    <button class="export-option" data-action="html">HTML <span class="format-tag">Visualisation</span></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="error-banner" id="errorBanner"></div>
+
+    <div class="stat-grid" id="statGrid">
+        <div class="stat-card">
+            <div class="stat-label">Moy. générale</div>
+            <div class="stat-value" id="statOverall">—</div>
+            <div class="stat-sub" id="statOverallSub"></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Moy. classe</div>
+            <div class="stat-value" id="statClass">—</div>
+            <div class="stat-sub">Promotion</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Meilleure note</div>
+            <div class="stat-value good" id="statBestGrade">—</div>
+            <div class="stat-sub" id="statBestGradeSub"></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">1ères de classe</div>
+            <div class="stat-value" id="statBestInClass" style="font-size:1.2rem">—</div>
+            <div class="stat-sub">Notes maximales</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Notes totales</div>
+            <div class="stat-value" id="statCount">—</div>
+            <div class="stat-sub">Ce trimestre</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Au-dessus moy.</div>
+            <div class="stat-value good" id="statAbove">—</div>
+            <div class="stat-sub">Vs. classe</div>
+        </div>
+    </div>
+
+    <div class="chart-container">
+        <div class="chart-title">Évolution de la moyenne générale</div>
+        <div class="chart-wrap" style="height:220px">
+            <canvas id="avgTimelineChart"></canvas>
+        </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px" id="chartsRow">
+        <div class="chart-container" style="margin-bottom:0">
+            <div class="chart-title">Moyennes par matière</div>
+            <div class="chart-wrap" id="subjectChartWrap">
+                <canvas id="subjectAvgChart"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-container" style="margin-bottom:0">
+            <div class="chart-title">Matières — <span id="subjectChartName" style="color:var(--accent)">toutes</span></div>
+            <div class="chart-wrap" style="height:280px">
+                <canvas id="subjectDetailChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom:24px">
+        <div class="card-header">
+            <div class="card-title">Matières</div>
+            <button class="btn btn-sm btn-ghost" id="clearSubjectFilter" style="display:none">Tout afficher</button>
+        </div>
+        <div class="subjects-grid" id="subjectCards"></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">Toutes les notes</div>
+            <div style="display:flex;gap:8px;align-items:center">
+                <label style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-faint)">Trier</label>
+                <select class="select-input" id="sortSelect">
+                    <option value="date-desc">Date ↓</option>
+                    <option value="date-asc">Date ↑</option>
+                    <option value="grade-desc">Note ↓</option>
+                    <option value="grade-asc">Note ↑</option>
+                    <option value="subject">Matière</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="grades-table-wrap">
+            <table class="grades-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Matière</th>
+                        <th>Note</th>
+                        <th>Moy. Classe</th>
+                        <th>Max Cl.</th>
+                        <th>Min Cl.</th>
+                        <th>Coef.</th>
+                        <th>Commentaire</th>
+                    </tr>
+                </thead>
+                <tbody id="gradesTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+</main>
+
+<script src="../app.js"></script>
+<script>
+const {
+    requireAuth, apiPost, subjectColor, gradeClass, gradeValue, gradeNormalized,
+    formatDateShort, formatDate, showLoading, hideLoading, showError, hideError,
+    renderNav, exportJson, exportMarkdown, exportHtml, buildGradesMarkdown, buildGradesHtml
+} = window.ButterflyApp;
+
+Chart.defaults.color = "#78716c";
+Chart.defaults.font.family = "'JetBrains Mono', 'SF Mono', monospace";
+Chart.defaults.font.size = 11;
+Chart.defaults.borderColor = "#292524";
+
+const session = requireAuth();
+if (!session) throw new Error("No session");
+
+renderNav("grades");
+
+let overviewData = null;
+let activeSubjectId = null;
+let avgChart = null;
+let subjectAvgChart = null;
+let subjectDetailChart = null;
+let currentSort = "date-desc";
+
+const periodSelect = document.getElementById("periodSelect");
+const sortSelect = document.getElementById("sortSelect");
+const exportBtn = document.getElementById("exportBtn");
+const exportDropdown = document.getElementById("exportDropdown");
+
+if (session.periods) {
+    session.periods.forEach(p => {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = p.name;
+        if (p.id === session.defaultPeriodId) opt.selected = true;
+        periodSelect.appendChild(opt);
+    });
+}
+
+exportBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    exportDropdown.classList.toggle("open");
+});
+
+document.addEventListener("click", () => exportDropdown.classList.remove("open"));
+
+document.getElementById("exportDropdown").addEventListener("click", (e) => {
+    const btn = e.target.closest(".export-option");
+    if (!btn || !overviewData) return;
+    const action = btn.dataset.action;
+    const period = overviewData.period.name.replace(/\s+/g, "-");
+    if (action === "json") {
+        exportJson(overviewData, `notes-${period}.json`);
+    } else if (action === "markdown") {
+        exportMarkdown(buildGradesMarkdown(overviewData, session), `notes-${period}.md`);
+    } else if (action === "html") {
+        exportHtml(buildGradesHtml(overviewData, session), `notes-${period}.html`);
+    }
+    exportDropdown.classList.remove("open");
+});
+
+document.getElementById("clearSubjectFilter").addEventListener("click", () => {
+    activeSubjectId = null;
+    document.getElementById("clearSubjectFilter").style.display = "none";
+    document.querySelectorAll(".subject-card").forEach(c => c.classList.remove("active"));
+    renderGradesTable(overviewData.grades);
+    renderSubjectDetailChart(null);
+    document.getElementById("subjectChartName").textContent = "toutes";
+});
+
+sortSelect.addEventListener("change", () => {
+    currentSort = sortSelect.value;
+    if (overviewData) {
+        const grades = activeSubjectId
+            ? overviewData.grades.filter(g => g.subjectId === activeSubjectId)
+            : overviewData.grades;
+        renderGradesTable(grades);
+    }
+});
+
+periodSelect.addEventListener("change", () => {
+    fetchOverview(periodSelect.value);
+});
+
+async function fetchOverview(periodId) {
+    showLoading("Chargement des notes…");
+    hideError();
+
+    try {
+        overviewData = await apiPost("/api/overview", {
+            auth: session.auth,
+            periodId: periodId || null
+        });
+
+        document.getElementById("periodLabel").textContent = overviewData.period.name;
+        renderStats(overviewData);
+        renderSubjectCards(overviewData);
+        renderGradesTable(overviewData.grades);
+        renderAvgTimelineChart(overviewData);
+        renderSubjectAvgChart(overviewData);
+        renderSubjectDetailChart(null);
+    } catch (err) {
+        showError("Erreur: " + err.message);
+    } finally {
+        hideLoading();
+    }
+}
+
+function renderStats(data) {
+    const { grades, subjectsAverages, overallAverage, classAverage } = data;
+
+    const overallEl = document.getElementById("statOverall");
+    overallEl.textContent = overallAverage != null ? overallAverage.toFixed(2) : "N/A";
+    overallEl.className = "stat-value " + (overallAverage != null ? gradeClass(overallAverage) : "");
+
+    document.getElementById("statClass").textContent = classAverage != null ? classAverage.toFixed(2) : "N/A";
+
+    const validGrades = grades.filter(g => g.value?.points != null);
+    const bestGrade = validGrades.reduce((best, g) => {
+        const n = gradeNormalized(g.value, g.outOf);
+        const bn = best ? gradeNormalized(best.value, best.outOf) : -1;
+        return n > bn ? g : best;
+    }, null);
+
+    if (bestGrade) {
+        document.getElementById("statBestGrade").textContent = gradeValue(bestGrade.value, bestGrade.outOf);
+        document.getElementById("statBestGradeSub").textContent = bestGrade.subjectName;
+    }
+
+    const bestInClass = validGrades.filter(g => g.max?.points != null && g.value?.points != null && g.value.points >= g.max.points);
+    document.getElementById("statBestInClass").textContent = bestInClass.length + " note" + (bestInClass.length !== 1 ? "s" : "");
+
+    document.getElementById("statCount").textContent = validGrades.length;
+
+    const aboveAvg = validGrades.filter(g => g.average?.points != null && g.value?.points != null && g.value.points > g.average.points);
+    const abovePct = validGrades.length > 0 ? Math.round((aboveAvg.length / validGrades.length) * 100) : 0;
+    document.getElementById("statAbove").textContent = abovePct + "%";
+}
+
+function renderSubjectCards(data) {
+    const container = document.getElementById("subjectCards");
+    container.innerHTML = "";
+
+    data.subjectsAverages.forEach(avg => {
+        const color = subjectColor(avg.subjectName);
+        const card = document.createElement("div");
+        card.className = "subject-card";
+        card.dataset.subjectId = avg.subjectId ?? avg.subjectName;
+        card.style.setProperty("--subject-color", color);
+
+        const studentVal = avg.student?.toFixed(2) ?? "—";
+        const classVal = avg.classAverage?.toFixed(2) ?? "—";
+        const maxVal = avg.max?.toFixed(2) ?? "—";
+
+        const sc = avg.student != null ? gradeClass(avg.student) : "";
+
+        card.innerHTML = `
+            <div class="subject-card-name">${avg.subjectName}</div>
+            <div class="subject-card-stats">
+                <div class="subject-card-stat">
+                    <div class="val ${sc}">${studentVal}</div>
+                    <div class="lbl">Vous</div>
+                </div>
+                <div class="subject-card-stat">
+                    <div class="val" style="color:var(--text-muted)">${classVal}</div>
+                    <div class="lbl">Classe</div>
+                </div>
+                <div class="subject-card-stat">
+                    <div class="val" style="color:var(--green)">${maxVal}</div>
+                    <div class="lbl">Max</div>
+                </div>
+            </div>
+        `;
+
+        card.addEventListener("click", () => {
+            const sid = avg.subjectId ?? avg.subjectName;
+            if (activeSubjectId === sid) {
+                activeSubjectId = null;
+                card.classList.remove("active");
+                document.getElementById("clearSubjectFilter").style.display = "none";
+                renderGradesTable(data.grades);
+                renderSubjectDetailChart(null);
+                document.getElementById("subjectChartName").textContent = "toutes";
+            } else {
+                activeSubjectId = sid;
+                document.querySelectorAll(".subject-card").forEach(c => c.classList.remove("active"));
+                card.classList.add("active");
+                document.getElementById("clearSubjectFilter").style.display = "";
+                const filtered = data.grades.filter(g => (g.subjectId ?? g.subjectName) === sid);
+                renderGradesTable(filtered);
+                renderSubjectDetailChart(avg.subjectName);
+                document.getElementById("subjectChartName").textContent = avg.subjectName;
+            }
+        });
+
+        container.appendChild(card);
+    });
+}
+
+function sortGrades(grades) {
+    const copy = [...grades];
+    switch (currentSort) {
+        case "date-asc": return copy.sort((a, b) => new Date(a.date) - new Date(b.date));
+        case "date-desc": return copy.sort((a, b) => new Date(b.date) - new Date(a.date));
+        case "grade-desc": return copy.sort((a, b) => (gradeNormalized(b.value, b.outOf) ?? -1) - (gradeNormalized(a.value, a.outOf) ?? -1));
+        case "grade-asc": return copy.sort((a, b) => (gradeNormalized(a.value, a.outOf) ?? 99) - (gradeNormalized(b.value, b.outOf) ?? 99));
+        case "subject": return copy.sort((a, b) => a.subjectName.localeCompare(b.subjectName, "fr"));
+        default: return copy;
+    }
+}
+
+function renderGradesTable(grades) {
+    const tbody = document.getElementById("gradesTableBody");
+    const sorted = sortGrades(grades);
+
+    if (sorted.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-faint);padding:24px;font-family:var(--font-mono);font-size:0.8rem">Aucune note</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = sorted.map(g => {
+        const color = subjectColor(g.subjectName);
+        const normalized = gradeNormalized(g.value, g.outOf);
+        const gc = gradeClass(normalized);
+        const displayVal = g.value?.points !== null ? g.value.points : null;
+        const outOf = g.outOf?.points ?? 20;
+
+        const isBestInClass = g.max?.points != null && g.value?.points != null && g.value.points >= g.max.points;
+        const isAboveAvg = g.average?.points != null && g.value?.points != null && g.value.points > g.average.points;
+
+        const noteDisplay = displayVal != null
+            ? `<span class="grade-badge ${gc}">${displayVal}/${outOf}</span>${isBestInClass ? '<span class="trophy" title="Meilleure note de la classe">⭐</span>' : isAboveAvg ? '<span class="trophy" title="Au-dessus de la moyenne classe" style="opacity:0.6">↑</span>' : ""}`
+            : `<span class="grade-badge special">${g.value?.kind != null ? ["Absent","Non rendu","Dispensé","Exempté","Erreur"][g.value.kind] ?? "—" : "—"}</span>`;
+
+        const avgDisplay = g.average?.points != null ? g.average.points.toFixed(1) : "—";
+        const maxDisplay = g.max?.points != null ? g.max.points.toFixed(1) : "—";
+        const minDisplay = g.min?.points != null ? g.min.points.toFixed(1) : "—";
+        const comment = g.comment || g.commentaireSurNote || "";
+
+        return `<tr class="${isBestInClass ? "has-best" : ""}">
+            <td style="font-family:var(--font-mono);font-size:0.75rem;color:var(--text-muted);white-space:nowrap">${formatDateShort(g.date)}</td>
+            <td><span class="subject-tag" style="--subject-color:${color}" title="${g.subjectName}">${g.subjectName}</span></td>
+            <td style="white-space:nowrap">${noteDisplay}</td>
+            <td style="font-family:var(--font-mono);font-size:0.78rem">${avgDisplay}</td>
+            <td style="font-family:var(--font-mono);font-size:0.78rem;color:var(--green)">${maxDisplay}</td>
+            <td style="font-family:var(--font-mono);font-size:0.78rem;color:var(--red)">${minDisplay}</td>
+            <td style="font-family:var(--font-mono);font-size:0.75rem;color:var(--text-faint)">x${g.coefficient ?? 1}</td>
+            <td style="font-size:0.78rem;color:var(--text-muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${comment}">${comment || "—"}</td>
+        </tr>`;
+    }).join("");
+}
+
+function renderAvgTimelineChart(data) {
+    const ctx = document.getElementById("avgTimelineChart").getContext("2d");
+
+    const sorted = [...data.grades]
+        .filter(g => g.value?.points != null && g.outOf?.points != null)
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    let totalPoints = 0;
+    let totalWeight = 0;
+    const runningAvg = [];
+    const labels = [];
+
+    sorted.forEach((g, i) => {
+        const n = gradeNormalized(g.value, g.outOf);
+        const coef = g.coefficient ?? 1;
+        if (g.isBonus) {
+            if (n > 10) { totalPoints += n * coef; totalWeight += coef; }
+        } else {
+            totalPoints += n * coef;
+            totalWeight += coef;
+        }
+        runningAvg.push(totalWeight > 0 ? parseFloat((totalPoints / totalWeight).toFixed(3)) : 0);
+        labels.push(formatDateShort(g.date));
+    });
+
+    const individualPoints = sorted.map(g => ({ x: formatDateShort(g.date), y: gradeNormalized(g.value, g.outOf) }));
+
+    if (avgChart) avgChart.destroy();
+
+    avgChart = new Chart(ctx, {
+        data: {
+            labels,
+            datasets: [
+                {
+                    type: "line",
+                    label: "Moyenne cumulée",
+                    data: runningAvg,
+                    borderColor: "#3b82f6",
+                    backgroundColor: "rgba(59,130,246,0.05)",
+                    fill: true,
+                    borderWidth: 2,
+                    pointRadius: 2,
+                    pointHoverRadius: 5,
+                    tension: 0.3,
+                    order: 1
+                },
+                {
+                    type: "scatter",
+                    label: "Notes individuelles",
+                    data: sorted.map((g, i) => ({ x: i, y: gradeNormalized(g.value, g.outOf) })),
+                    backgroundColor: sorted.map(g => subjectColor(g.subjectName) + "cc"),
+                    pointRadius: 4,
+                    pointHoverRadius: 7,
+                    showLine: false,
+                    order: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: {
+                legend: { position: "top", labels: { boxWidth: 12, padding: 16 } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => {
+                            if (ctx.dataset.type === "scatter") {
+                                const g = sorted[ctx.dataIndex];
+                                return ` ${g.subjectName}: ${g.value.points}/${g.outOf.points}`;
+                            }
+                            return ` Moy: ${ctx.raw.toFixed(2)}/20`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { color: "#1c1917" }, ticks: { maxTicksLimit: 12, maxRotation: 0 } },
+                y: {
+                    min: 0, max: 20,
+                    grid: { color: "#292524" },
+                    ticks: {
+                        stepSize: 5,
+                        callback: v => v + "/20"
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderSubjectAvgChart(data) {
+    const wrap = document.getElementById("subjectChartWrap");
+    const validAvgs = data.subjectsAverages.filter(a => a.student != null);
+
+    wrap.style.height = Math.max(200, validAvgs.length * 36) + "px";
+
+    const ctx = document.getElementById("subjectAvgChart").getContext("2d");
+    const labels = validAvgs.map(a => a.subjectName);
+    const studentVals = validAvgs.map(a => a.student);
+    const classVals = validAvgs.map(a => a.classAverage);
+    const colors = validAvgs.map(a => subjectColor(a.subjectName));
+
+    if (subjectAvgChart) subjectAvgChart.destroy();
+
+    subjectAvgChart = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: "Vous",
+                    data: studentVals,
+                    backgroundColor: colors.map(c => c + "cc"),
+                    borderColor: colors,
+                    borderWidth: 1
+                },
+                {
+                    label: "Classe",
+                    data: classVals,
+                    backgroundColor: "#44403c88",
+                    borderColor: "#57534e",
+                    borderWidth: 1
+                }
+            ]
+        },
+        options: {
+            indexAxis: "y",
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: "top", labels: { boxWidth: 10 } },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ` ${ctx.dataset.label}: ${ctx.raw?.toFixed(2) ?? "N/A"}/20`
+                    }
+                }
+            },
+            scales: {
+                x: { min: 0, max: 20, grid: { color: "#292524" }, ticks: { callback: v => v } },
+                y: { grid: { display: false }, ticks: { font: { size: 10 } } }
+            }
+        }
+    });
+}
+
+function renderSubjectDetailChart(subjectName) {
+    const ctx = document.getElementById("subjectDetailChart").getContext("2d");
+    if (subjectDetailChart) { subjectDetailChart.destroy(); subjectDetailChart = null; }
+
+    if (!subjectName || !overviewData) {
+        subjectDetailChart = new Chart(ctx, {
+            type: "bar",
+            data: { labels: [], datasets: [] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: { y: { min: 0, max: 20 } }
+            }
+        });
+        return;
+    }
+
+    const grades = overviewData.grades
+        .filter(g => g.subjectName === subjectName && g.value?.points != null)
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    const color = subjectColor(subjectName);
+    const labels = grades.map(g => formatDateShort(g.date));
+    const vals = grades.map(g => gradeNormalized(g.value, g.outOf));
+    const classAvgs = grades.map(g => g.average?.points != null ? (g.average.points / (g.outOf?.points ?? 20)) * 20 : null);
+    const classMaxs = grades.map(g => g.max?.points != null ? (g.max.points / (g.outOf?.points ?? 20)) * 20 : null);
+
+    subjectDetailChart = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels,
+            datasets: [
+                {
+                    type: "bar",
+                    label: "Note (/20)",
+                    data: vals,
+                    backgroundColor: vals.map(v => (v >= 14 ? "#22c55e99" : v >= 10 ? "#f59e0b99" : "#ef444499")),
+                    borderColor: vals.map(v => v >= 14 ? "#22c55e" : v >= 10 ? "#f59e0b" : "#ef4444"),
+                    borderWidth: 1,
+                    order: 2
+                },
+                {
+                    type: "line",
+                    label: "Moy. classe",
+                    data: classAvgs,
+                    borderColor: "#78716c",
+                    borderDash: [4, 4],
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    fill: false,
+                    order: 1
+                },
+                {
+                    type: "line",
+                    label: "Max classe",
+                    data: classMaxs,
+                    borderColor: "#22c55e55",
+                    borderDash: [2, 4],
+                    borderWidth: 1,
+                    pointRadius: 0,
+                    fill: false,
+                    order: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: "top", labels: { boxWidth: 10 } },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ` ${ctx.dataset.label}: ${ctx.raw?.toFixed(2) ?? "N/A"}/20`
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { color: "#1c1917" } },
+                y: { min: 0, max: 20, grid: { color: "#292524" }, ticks: { stepSize: 5 } }
+            }
+        }
+    });
+}
+
+function init() {
+    const initialPeriod = periodSelect.value || session.defaultPeriodId;
+    fetchOverview(initialPeriod);
+}
+
+init();
+</script>
+</body>
+</html>

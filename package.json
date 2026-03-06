@@ -1,0 +1,15 @@
+{
+    "name": "butterfly",
+    "version": "1.0.0",
+    "description": "Minimal Pronote web client powered by Pawnote",
+    "type": "module",
+    "scripts": {
+        "dev": "vercel dev"
+    },
+    "dependencies": {
+        "pawnote": "latest"
+    },
+    "devDependencies": {
+        "vercel": "latest"
+    }
+}

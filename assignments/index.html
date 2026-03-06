@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="description" content="Devoirs et travaux à faire Pronote">
+    <meta name="author" content="Elouan Grimm">
+
+    <meta property="og:title" content="Butterfly — Devoirs">
+    <meta property="og:description" content="Vos devoirs et travaux à rendre Pronote.">
+    <meta property="og:type" content="website">
+
+    <title>Butterfly — Devoirs</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🦋</text></svg>">
+    <link rel="stylesheet" href="../style.css">
+    <style>
+        .return-kind-icon {
+            font-size: 0.7rem;
+            font-family: var(--font-mono);
+            padding: 2px 6px;
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border);
+            color: var(--text-faint);
+        }
+
+        .attachment-link {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        .attachment-link:hover { text-decoration: underline; }
+
+        .done-checkbox {
+            width: 20px;
+            height: 20px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-strong);
+            cursor: pointer;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            transition: background-color 0.12s;
+        }
+
+        .done-checkbox.checked {
+            background-color: var(--green);
+            border-color: var(--green);
+            color: #0c0a09;
+        }
+
+        .week-range-ctrl {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .week-range-ctrl label {
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            color: var(--text-faint);
+        }
+
+        .filter-bar {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .filter-btn {
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            padding: 4px 12px;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.12s;
+        }
+
+        .filter-btn:hover, .filter-btn.active {
+            border-color: var(--border-strong);
+            background-color: var(--bg-surface);
+            color: var(--text-bright);
+        }
+
+        .subject-filter {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .subject-chip {
+            font-family: var(--font-mono);
+            font-size: 0.68rem;
+            padding: 3px 10px;
+            background: transparent;
+            border-left: 3px solid var(--sc, var(--stone-600));
+            border-top: 1px solid var(--border);
+            border-right: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.12s;
+        }
+
+        .subject-chip:hover, .subject-chip.active {
+            background-color: var(--bg-surface);
+            color: var(--text-bright);
+        }
+
+        .group-header {
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-faint);
+            padding: 12px 16px 8px;
+            background-color: var(--bg-raised);
+            border: 1px solid var(--border);
+            border-top: none;
+            margin-top: 0;
+        }
+
+        .group-header:first-child { border-top: 1px solid var(--border); }
+
+        .assignment-item {
+            border-left: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text">Chargement des devoirs…</div>
+</div>
+
+<nav class="nav">
+    <a href="/" class="nav-brand">🦋 butterfly</a>
+    <ul class="nav-links"></ul>
+    <div class="nav-right">
+        <span class="nav-user"></span>
+        <button class="btn btn-sm btn-ghost btn-logout">Déconnexion</button>
+    </div>
+</nav>
+
+<main class="main">
+    <div class="page-header">
+        <div>
+            <h1>Devoirs</h1>
+            <div class="subtitle" id="rangeLabel">—</div>
+        </div>
+        <div class="page-actions">
+            <div class="week-range-ctrl">
+                <label>Semaines</label>
+                <select class="select-input" id="fromWeek"></select>
+                <label>→</label>
+                <select class="select-input" id="toWeek"></select>
+                <button class="btn btn-sm btn-primary" id="loadBtn">Charger</button>
+            </div>
+
+            <div class="export-menu" id="exportMenu">
+                <button class="btn btn-sm" id="exportBtn">Exporter ▾</button>
+                <div class="export-dropdown" id="exportDropdown">
+                    <button class="export-option" data-action="json">JSON <span class="format-tag">LLM · données brutes</span></button>
+                    <button class="export-option" data-action="markdown">Markdown <span class="format-tag">LLM · rapport structuré</span></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="error-banner" id="errorBanner"></div>
+
+    <div class="stat-grid" id="statsGrid" style="display:none">
+        <div class="stat-card">
+            <div class="stat-label">Devoirs totaux</div>
+            <div class="stat-value" id="statTotal">—</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">À faire</div>
+            <div class="stat-value bad" id="statPending">—</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Faits</div>
+            <div class="stat-value good" id="statDone">—</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Rendus en ligne</div>
+            <div class="stat-value" id="statUpload">—</div>
+        </div>
+    </div>
+
+    <div class="filter-bar" id="filterBar" style="display:none">
+        <button class="filter-btn active" data-filter="all">Tous</button>
+        <button class="filter-btn" data-filter="pending">À faire</button>
+        <button class="filter-btn" data-filter="done">Faits</button>
+        <button class="filter-btn" data-filter="overdue">En retard</button>
+        <div style="flex:1"></div>
+        <div class="subject-filter" id="subjectFilter"></div>
+    </div>
+
+    <div id="assignmentsList"></div>
+</main>
+
+<script src="../app.js"></script>
+<script>
+const {
+    requireAuth, apiPost, subjectColor, isoWeekNumber, formatDate,
+    showLoading, hideLoading, showError, hideError, renderNav, exportJson, exportMarkdown
+} = window.ButterflyApp;
+
+const session = requireAuth();
+if (!session) throw new Error("No session");
+
+renderNav("assignments");
+
+const RETURN_KINDS = { 0: "Aucun", 1: "Papier", 2: "Fichier en ligne", 3: "Kiosk", 4: "Audio" };
+
+let allAssignments = [];
+let doneSet = new Set(JSON.parse(localStorage.getItem("butterfly_done") || "[]"));
+let activeFilter = "all";
+let activeSubject = null;
+
+const currentWeek = isoWeekNumber(new Date());
+const fromWeekSel = document.getElementById("fromWeek");
+const toWeekSel = document.getElementById("toWeek");
+
+for (let w = Math.max(1, currentWeek - 2); w <= Math.min(52, currentWeek + 6); w++) {
+    const opt1 = document.createElement("option");
+    opt1.value = w;
+    opt1.textContent = "S" + w;
+    if (w === currentWeek) opt1.selected = true;
+    fromWeekSel.appendChild(opt1);
+
+    const opt2 = opt1.cloneNode(true);
+    if (w === currentWeek + 3) opt2.selected = true;
+    toWeekSel.appendChild(opt2);
+}
+
+document.getElementById("loadBtn").addEventListener("click", () => {
+    fetchAssignments(parseInt(fromWeekSel.value), parseInt(toWeekSel.value));
+});
+
+document.getElementById("exportBtn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    document.getElementById("exportDropdown").classList.toggle("open");
+});
+
+document.addEventListener("click", () => document.getElementById("exportDropdown").classList.remove("open"));
+
+document.getElementById("exportDropdown").addEventListener("click", (e) => {
+    const btn = e.target.closest(".export-option");
+    if (!btn) return;
+    const action = btn.dataset.action;
+    if (action === "json") {
+        const { exportJson: ej } = window.ButterflyApp;
+        ej(allAssignments, "devoirs.json");
+    } else if (action === "markdown") {
+        const md = buildDevModelsMd();
+        window.ButterflyApp.exportMarkdown(md, "devoirs.md");
+    }
+    document.getElementById("exportDropdown").classList.remove("open");
+});
+
+document.getElementById("filterBar").addEventListener("click", (e) => {
+    const btn = e.target.closest(".filter-btn");
+    if (!btn) return;
+    document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    activeFilter = btn.dataset.filter;
+    renderList();
+});
+
+function buildDevModelsMd() {
+    const now = new Date().toLocaleDateString("fr-FR");
+    let md = `# Devoirs — ${session.studentName ?? "Étudiant"}\n\n`;
+    md += `**Export**: ${now}\n\n---\n\n`;
+
+    const sorted = [...allAssignments].sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+
+    const bySubject = {};
+    sorted.forEach(a => {
+        if (!bySubject[a.subjectName]) bySubject[a.subjectName] = [];
+        bySubject[a.subjectName].push(a);
+    });
+
+    Object.entries(bySubject).forEach(([subject, items]) => {
+        md += `## ${subject}\n\n`;
+        items.forEach(a => {
+            const deadline = a.deadline ? new Date(a.deadline).toLocaleDateString("fr-FR") : "—";
+            const done = doneSet.has(a.id) ? "✅" : "⬜";
+            md += `- ${done} **${deadline}** — ${a.description || "(pas de description)"}\n`;
+            if (a.return?.kind > 0) md += `  - Rendu: ${RETURN_KINDS[a.return.kind] || a.return.kind}\n`;
+            if (a.attachments?.length > 0) {
+                a.attachments.forEach(att => { md += `  - 📎 [${att.name}](${att.url})\n`; });
+            }
+        });
+        md += "\n";
+    });
+
+    return md;
+}
+
+function saveDone() {
+    localStorage.setItem("butterfly_done", JSON.stringify([...doneSet]));
+}
+
+function isOverdue(deadline) {
+    return deadline && new Date(deadline) < new Date();
+}
+
+function isSoon(deadline) {
+    if (!deadline) return false;
+    const diff = new Date(deadline) - new Date();
+    return diff > 0 && diff < 3 * 24 * 60 * 60 * 1000;
+}
+
+function renderStats(assignments) {
+    document.getElementById("statsGrid").style.display = "grid";
+    document.getElementById("filterBar").style.display = "flex";
+    const done = assignments.filter(a => doneSet.has(a.id)).length;
+    const uploads = assignments.filter(a => a.return?.kind === 2).length;
+    document.getElementById("statTotal").textContent = assignments.length;
+    document.getElementById("statPending").textContent = assignments.length - done;
+    document.getElementById("statDone").textContent = done;
+    document.getElementById("statUpload").textContent = uploads;
+}
+
+function renderSubjectFilters(assignments) {
+    const subjects = [...new Set(assignments.map(a => a.subjectName))].sort();
+    const container = document.getElementById("subjectFilter");
+    container.innerHTML = "";
+
+    subjects.forEach(s => {
+        const color = subjectColor(s);
+        const chip = document.createElement("button");
+        chip.className = "subject-chip" + (activeSubject === s ? " active" : "");
+        chip.style.setProperty("--sc", color);
+        chip.textContent = s;
+        chip.addEventListener("click", () => {
+            activeSubject = activeSubject === s ? null : s;
+            renderList();
+        });
+        container.appendChild(chip);
+    });
+}
+
+function filterAssignments() {
+    let list = [...allAssignments];
+
+    if (activeSubject) list = list.filter(a => a.subjectName === activeSubject);
+
+    if (activeFilter === "pending") list = list.filter(a => !doneSet.has(a.id));
+    else if (activeFilter === "done") list = list.filter(a => doneSet.has(a.id));
+    else if (activeFilter === "overdue") list = list.filter(a => isOverdue(a.deadline) && !doneSet.has(a.id));
+
+    return list.sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+}
+
+function groupByDate(assignments) {
+    const groups = {};
+    assignments.forEach(a => {
+        const key = a.deadline ? new Date(a.deadline).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "Date inconnue";
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(a);
+    });
+    return groups;
+}
+
+function renderList() {
+    const container = document.getElementById("assignmentsList");
+    container.innerHTML = "";
+
+    const filtered = filterAssignments();
+    renderSubjectFilters(allAssignments);
+
+    document.querySelectorAll(".subject-chip").forEach(c => {
+        c.classList.toggle("active", c.textContent === activeSubject);
+    });
+
+    if (filtered.length === 0) {
+        container.innerHTML = `<div class="empty-state"><div class="icon">📭</div>Aucun devoir dans cette sélection.</div>`;
+        return;
+    }
+
+    const groups = groupByDate(filtered);
+
+    Object.entries(groups).forEach(([dateStr, items]) => {
+        const istoday = items[0]?.deadline && new Date(items[0].deadline).toDateString() === new Date().toDateString();
+        const header = document.createElement("div");
+        header.className = "group-header";
+        header.textContent = dateStr + (istoday ? " — Aujourd'hui" : "");
+        if (istoday) header.style.color = "var(--amber)";
+        container.appendChild(header);
+
+        items.forEach(a => {
+            const color = subjectColor(a.subjectName);
+            const isDone = doneSet.has(a.id);
+            const overdue = !isDone && isOverdue(a.deadline);
+            const soon = !isDone && isSoon(a.deadline);
+
+            const item = document.createElement("div");
+            item.className = "assignment-item" + (isDone ? " done" : "");
+            item.style.display = "grid";
+            item.style.gridTemplateColumns = "4px 1fr auto";
+            item.style.border = "1px solid var(--border)";
+            item.style.borderTop = "none";
+            item.style.background = "var(--bg-raised)";
+
+            const returnLabel = a.return?.kind > 0 ? `<span class="return-kind-icon">${RETURN_KINDS[a.return.kind] ?? "Rendu"}</span>` : "";
+            const attachmentHtml = (a.attachments ?? []).map(att =>
+                `<a class="attachment-link" href="${att.url}" target="_blank" rel="noopener">📎 ${att.name}</a>`
+            ).join(" ");
+
+            const deadlineClass = overdue ? "overdue" : soon ? "soon" : "";
+            const deadlineText = a.deadline ? new Date(a.deadline).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "";
+
+            item.innerHTML = `
+                <div style="background:${color}"></div>
+                <div style="padding:12px 16px">
+                    <div class="assignment-subject">${a.subjectName}</div>
+                    <div class="assignment-desc">${a.description || "<em style='color:var(--text-faint)'>Pas de description</em>"}</div>
+                    <div class="assignment-meta">
+                        ${deadlineText ? `<span class="assignment-deadline ${deadlineClass}">🕐 ${deadlineText}</span>` : ""}
+                        ${returnLabel}
+                        ${attachmentHtml}
+                        ${a.return?.uploaded ? `<span style="font-family:var(--font-mono);font-size:0.68rem;color:var(--green)">✓ Rendu</span>` : ""}
+                    </div>
+                </div>
+                <div style="padding:12px;display:flex;align-items:center">
+                    <div class="done-checkbox ${isDone ? "checked" : ""}" data-id="${a.id}" title="${isDone ? "Marquer non fait" : "Marquer fait"}">
+                        ${isDone ? "✓" : ""}
+                    </div>
+                </div>
+            `;
+
+            item.querySelector(".done-checkbox").addEventListener("click", (e) => {
+                const id = e.currentTarget.dataset.id;
+                if (doneSet.has(id)) doneSet.delete(id);
+                else doneSet.add(id);
+                saveDone();
+                renderStats(allAssignments);
+                renderList();
+            });
+
+            container.appendChild(item);
+        });
+    });
+}
+
+async function fetchAssignments(fromWeek, toWeek) {
+    showLoading("Chargement des devoirs…");
+    hideError();
+
+    document.getElementById("rangeLabel").textContent = `Semaines ${fromWeek} → ${toWeek}`;
+
+    try {
+        const data = await apiPost("/api/assignments", {
+            auth: session.auth,
+            fromWeek,
+            toWeek
+        });
+
+        allAssignments = data.assignments;
+        renderStats(allAssignments);
+        renderSubjectFilters(allAssignments);
+        renderList();
+    } catch (err) {
+        showError("Erreur: " + err.message);
+    } finally {
+        hideLoading();
+    }
+}
+
+fetchAssignments(parseInt(fromWeekSel.value), parseInt(toWeekSel.value));
+</script>
+</body>
+</html>

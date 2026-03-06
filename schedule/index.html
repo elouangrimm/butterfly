@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="description" content="Emploi du temps Pronote">
+    <meta name="author" content="Elouan Grimm">
+
+    <meta property="og:title" content="Butterfly — Emploi du temps">
+    <meta property="og:description" content="Votre emploi du temps Pronote.">
+    <meta property="og:type" content="website">
+
+    <title>Butterfly — Emploi du temps</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🦋</text></svg>">
+    <link rel="stylesheet" href="../style.css">
+    <style>
+        .schedule-outer {
+            overflow-x: auto;
+            margin-bottom: 32px;
+            border: 1px solid var(--border);
+        }
+
+        .schedule-header-row {
+            display: grid;
+            grid-template-columns: 52px repeat(5, 1fr);
+            border-bottom: 1px solid var(--border);
+            background-color: var(--bg-raised);
+            min-width: 700px;
+            position: sticky;
+            top: 52px;
+            z-index: 10;
+        }
+
+        .sch-header-cell {
+            padding: 8px;
+            border-right: 1px solid var(--border);
+            text-align: center;
+        }
+
+        .sch-header-cell:last-child { border-right: none; }
+
+        .sch-header-cell .day-name {
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-faint);
+        }
+
+        .sch-header-cell .day-date {
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: var(--text-bright);
+            margin-top: 2px;
+        }
+
+        .sch-header-cell.today .day-name { color: var(--accent); }
+        .sch-header-cell.today .day-date { color: var(--accent); }
+
+        .schedule-body-row {
+            display: grid;
+            grid-template-columns: 52px repeat(5, 1fr);
+            min-width: 700px;
+            position: relative;
+        }
+
+        .time-gutter {
+            border-right: 1px solid var(--border);
+            position: relative;
+        }
+
+        .time-tick {
+            position: absolute;
+            right: 6px;
+            font-family: var(--font-mono);
+            font-size: 0.6rem;
+            color: var(--text-faint);
+            transform: translateY(-50%);
+            white-space: nowrap;
+        }
+
+        .day-body {
+            border-right: 1px solid var(--border);
+            position: relative;
+            background-color: var(--bg);
+        }
+
+        .day-body:last-child { border-right: none; }
+
+        .day-body.today-col { background-color: rgba(59, 130, 246, 0.025); }
+
+        .hour-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background-color: var(--border);
+            pointer-events: none;
+        }
+
+        .hour-line.full { background-color: var(--stone-700); }
+
+        .lesson-card {
+            position: absolute;
+            left: 3px;
+            right: 3px;
+            overflow: hidden;
+            padding: 4px 6px;
+            border-left: 3px solid var(--lc, var(--accent));
+            background-color: var(--bg-surface);
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            border-right: 1px solid var(--border);
+            cursor: default;
+            transition: background-color 0.12s;
+        }
+
+        .lesson-card:hover { background-color: var(--bg-raised); z-index: 5; }
+
+        .lesson-card.cancelled {
+            opacity: 0.45;
+            border-left-color: var(--red) !important;
+        }
+
+        .lesson-card.activity { border-left-color: var(--amber) !important; }
+        .lesson-card.detention { border-left-color: var(--red) !important; }
+
+        .lc-subject {
+            font-family: var(--font-mono);
+            font-size: 0.68rem;
+            font-weight: 700;
+            color: var(--text-bright);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            line-height: 1.2;
+        }
+
+        .lc-room {
+            font-size: 0.62rem;
+            color: var(--text-muted);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .lc-teacher {
+            font-size: 0.6rem;
+            color: var(--text-faint);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .lc-status {
+            font-size: 0.6rem;
+            color: var(--amber);
+            font-style: italic;
+        }
+
+        .now-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background-color: var(--red);
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        .now-line::before {
+            content: "";
+            position: absolute;
+            left: -4px;
+            top: -4px;
+            width: 10px;
+            height: 10px;
+            background-color: var(--red);
+            border-radius: 50% !important;
+        }
+
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 16px;
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            color: var(--text-faint);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            flex-shrink: 0;
+        }
+    </style>
+</head>
+<body>
+
+<div class="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text">Chargement de l'emploi du temps…</div>
+</div>
+
+<nav class="nav">
+    <a href="/" class="nav-brand">🦋 butterfly</a>
+    <ul class="nav-links"></ul>
+    <div class="nav-right">
+        <span class="nav-user"></span>
+        <button class="btn btn-sm btn-ghost btn-logout">Déconnexion</button>
+    </div>
+</nav>
+
+<main class="main">
+    <div class="page-header">
+        <div>
+            <h1>Emploi du temps</h1>
+            <div class="subtitle" id="weekLabel">—</div>
+        </div>
+        <div class="page-actions">
+            <div class="week-nav">
+                <button class="btn btn-sm" id="prevWeek">←</button>
+                <span class="week-label" id="weekNum">—</span>
+                <button class="btn btn-sm" id="nextWeek">→</button>
+            </div>
+            <button class="btn btn-sm" id="todayBtn">Aujourd'hui</button>
+        </div>
+    </div>
+
+    <div class="error-banner" id="errorBanner"></div>
+
+    <div class="stat-grid" id="weekStats" style="display:none">
+        <div class="stat-card">
+            <div class="stat-label">Cours cette semaine</div>
+            <div class="stat-value" id="statLessons">—</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Cours annulés</div>
+            <div class="stat-value bad" id="statCancelled">—</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Heures de cours</div>
+            <div class="stat-value" id="statHours">—</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Matières distinctes</div>
+            <div class="stat-value" id="statSubjects">—</div>
+        </div>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>Cours normal</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--amber)"></div>Activité</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>Annulé / Retenue</div>
+    </div>
+
+    <div class="schedule-outer">
+        <div class="schedule-header-row" id="scheduleHeaders"></div>
+        <div class="schedule-body-row" id="scheduleBody" style="height:680px"></div>
+    </div>
+</main>
+
+<script src="../app.js"></script>
+<script>
+const {
+    requireAuth, apiPost, subjectColor, isoWeekNumber, weekDateRange,
+    formatDate, formatTime, showLoading, hideLoading, showError, hideError, renderNav
+} = window.ButterflyApp;
+
+const session = requireAuth();
+if (!session) throw new Error("No session");
+
+renderNav("schedule");
+
+const DAY_START_H = 7;
+const DAY_END_H = 20;
+const TOTAL_MINUTES = (DAY_END_H - DAY_START_H) * 60;
+const GRID_PX = 680;
+const PX_PER_MIN = GRID_PX / TOTAL_MINUTES;
+const DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"];
+
+let currentWeek = isoWeekNumber(new Date());
+
+document.getElementById("prevWeek").addEventListener("click", () => { currentWeek--; fetchTimetable(); });
+document.getElementById("nextWeek").addEventListener("click", () => { currentWeek++; fetchTimetable(); });
+document.getElementById("todayBtn").addEventListener("click", () => { currentWeek = isoWeekNumber(new Date()); fetchTimetable(); });
+
+function minutesSinceDayStart(isoString) {
+    const d = new Date(isoString);
+    return (d.getHours() - DAY_START_H) * 60 + d.getMinutes();
+}
+
+function getDayIndex(isoString) {
+    const d = new Date(isoString);
+    return d.getDay() - 1;
+}
+
+function renderHeaders(monday) {
+    const today = new Date();
+    const headers = document.getElementById("scheduleHeaders");
+    headers.innerHTML = "";
+
+    const gutterCell = document.createElement("div");
+    gutterCell.className = "sch-header-cell";
+    gutterCell.style.background = "var(--bg-raised)";
+    headers.appendChild(gutterCell);
+
+    for (let i = 0; i < 5; i++) {
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + i);
+        const isToday = d.toDateString() === today.toDateString();
+        const cell = document.createElement("div");
+        cell.className = "sch-header-cell" + (isToday ? " today" : "");
+        cell.innerHTML = `<div class="day-name">${DAYS[i]}</div><div class="day-date">${d.toLocaleDateString("fr-FR", {day:"2-digit",month:"2-digit"})}</div>`;
+        headers.appendChild(cell);
+    }
+}
+
+function renderGrid(monday, lessons) {
+    const body = document.getElementById("scheduleBody");
+    body.innerHTML = "";
+
+    const today = new Date();
+
+    const gutter = document.createElement("div");
+    gutter.className = "time-gutter";
+    gutter.style.position = "relative";
+    gutter.style.height = GRID_PX + "px";
+
+    for (let h = DAY_START_H; h <= DAY_END_H; h++) {
+        const mins = (h - DAY_START_H) * 60;
+        const y = Math.round(mins * PX_PER_MIN);
+        const tick = document.createElement("div");
+        tick.className = "time-tick";
+        tick.style.top = y + "px";
+        tick.textContent = h + "h";
+        gutter.appendChild(tick);
+    }
+    body.appendChild(gutter);
+
+    const dayLessons = Array.from({ length: 5 }, () => []);
+    lessons.forEach(l => {
+        if (!l.startDate) return;
+        const di = getDayIndex(l.startDate);
+        if (di >= 0 && di < 5) dayLessons[di].push(l);
+    });
+
+    for (let col = 0; col < 5; col++) {
+        const dayDate = new Date(monday);
+        dayDate.setDate(monday.getDate() + col);
+        const isToday = dayDate.toDateString() === today.toDateString();
+
+        const dayCol = document.createElement("div");
+        dayCol.className = "day-body" + (isToday ? " today-col" : "");
+        dayCol.style.height = GRID_PX + "px";
+        dayCol.style.position = "relative";
+
+        for (let h = DAY_START_H; h <= DAY_END_H; h++) {
+            const mins = (h - DAY_START_H) * 60;
+            const y = Math.round(mins * PX_PER_MIN);
+            const line = document.createElement("div");
+            line.className = "hour-line" + (h % 2 === 0 ? " full" : "");
+            line.style.top = y + "px";
+            dayCol.appendChild(line);
+        }
+
+        if (isToday) {
+            const now = new Date();
+            const nowMins = (now.getHours() - DAY_START_H) * 60 + now.getMinutes();
+            if (nowMins >= 0 && nowMins <= TOTAL_MINUTES) {
+                const nowLine = document.createElement("div");
+                nowLine.className = "now-line";
+                nowLine.style.top = Math.round(nowMins * PX_PER_MIN) + "px";
+                dayCol.appendChild(nowLine);
+            }
+        }
+
+        dayLessons[col].forEach(lesson => {
+            const startMins = minutesSinceDayStart(lesson.startDate);
+            const endMins = minutesSinceDayStart(lesson.endDate);
+            if (startMins < 0 || startMins >= TOTAL_MINUTES) return;
+
+            const top = Math.round(Math.max(0, startMins) * PX_PER_MIN);
+            const height = Math.max(20, Math.round((endMins - startMins) * PX_PER_MIN) - 2);
+
+            const card = document.createElement("div");
+            card.className = "lesson-card";
+
+            const isCancelled = lesson.isCancelled || (lesson.status && lesson.status.toLowerCase().includes("annul"));
+            if (isCancelled) card.classList.add("cancelled");
+            if (lesson.is === "activity") card.classList.add("activity");
+            if (lesson.is === "detention") card.classList.add("detention");
+
+            card.style.top = top + "px";
+            card.style.height = height + "px";
+
+            let subjectName = "???";
+            let color = "#57534e";
+
+            if (lesson.is === "lesson") {
+                subjectName = lesson.subjectName ?? "???";
+                color = subjectColor(subjectName);
+            } else if (lesson.is === "activity") {
+                subjectName = lesson.title ?? "Activité";
+                color = "#f59e0b";
+            } else if (lesson.is === "detention") {
+                subjectName = lesson.title ?? "Retenue";
+                color = "#ef4444";
+            }
+
+            card.style.setProperty("--lc", color);
+
+            const room = (lesson.classrooms ?? []).join(", ");
+            const teacher = (lesson.teacherNames ?? []).join(", ");
+            const showRoom = height > 36 && room;
+            const showTeacher = height > 54 && teacher;
+            const showStatus = lesson.status && !isCancelled;
+
+            card.innerHTML = `
+                <div class="lc-subject">${subjectName}</div>
+                ${showRoom ? `<div class="lc-room">${room}</div>` : ""}
+                ${showTeacher ? `<div class="lc-teacher">${teacher}</div>` : ""}
+                ${showStatus ? `<div class="lc-status">${lesson.status}</div>` : ""}
+            `;
+
+            card.title = [
+                subjectName,
+                `${formatTime(lesson.startDate)} — ${formatTime(lesson.endDate)}`,
+                room ? `Salle: ${room}` : "",
+                teacher ? `Prof: ${teacher}` : "",
+                lesson.status ?? "",
+                lesson.notes ?? ""
+            ].filter(Boolean).join("\n");
+
+            dayCol.appendChild(card);
+        });
+
+        body.appendChild(dayCol);
+    }
+}
+
+function renderWeekStats(lessons) {
+    const statsEl = document.getElementById("weekStats");
+    statsEl.style.display = "grid";
+
+    const allLessons = lessons.filter(l => l.is === "lesson");
+    const cancelled = allLessons.filter(l => l.isCancelled || (l.status && l.status.toLowerCase().includes("annul")));
+    const subjects = new Set(allLessons.map(l => l.subjectName).filter(Boolean));
+    const totalMins = allLessons
+        .filter(l => !l.isCancelled)
+        .reduce((acc, l) => {
+            if (!l.startDate || !l.endDate) return acc;
+            return acc + Math.round((new Date(l.endDate) - new Date(l.startDate)) / 60000);
+        }, 0);
+
+    document.getElementById("statLessons").textContent = allLessons.length;
+    document.getElementById("statCancelled").textContent = cancelled.length;
+    document.getElementById("statHours").textContent = (totalMins / 60).toFixed(1) + "h";
+    document.getElementById("statSubjects").textContent = subjects.size;
+}
+
+async function fetchTimetable() {
+    showLoading("Chargement de l'emploi du temps…");
+    hideError();
+
+    const { monday, friday } = weekDateRange(currentWeek);
+    document.getElementById("weekNum").textContent = "S" + currentWeek;
+    document.getElementById("weekLabel").textContent = `${monday.toLocaleDateString("fr-FR", { day: "2-digit", month: "long" })} — ${friday.toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}`;
+
+    renderHeaders(monday);
+
+    try {
+        const data = await apiPost("/api/timetable", {
+            auth: session.auth,
+            week: currentWeek
+        });
+
+        renderGrid(monday, data.classes);
+        renderWeekStats(data.classes);
+    } catch (err) {
+        showError("Erreur: " + err.message);
+    } finally {
+        hideLoading();
+    }
+}
+
+fetchTimetable();
+</script>
+</body>
+</html>

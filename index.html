@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="description" content="Client Pronote minimal et complet propulsé par Pawnote">
+    <meta name="author" content="Elouan Grimm">
+
+    <meta property="og:title" content="Butterfly — Client Pronote">
+    <meta property="og:description" content="Accédez à vos notes, emploi du temps et devoirs Pronote avec une interface claire.">
+    <meta property="og:type" content="website">
+
+    <title>Butterfly — Connexion</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🦋</text></svg>">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text">Connexion en cours…</div>
+</div>
+
+<div class="login-wrap">
+    <div class="login-box">
+        <div class="login-header">
+            <h1 class="login-title">🦋 butterfly</h1>
+            <div class="login-subtitle">Client Pronote · Pawnote API</div>
+        </div>
+        <form class="login-form" id="loginForm" autocomplete="off">
+            <div class="error-banner login-error" id="loginError"></div>
+
+            <div class="field">
+                <label for="pronoteURL">URL Pronote</label>
+                <input
+                    type="url"
+                    id="pronoteURL"
+                    name="pronoteURL"
+                    placeholder="https://monecole.index-education.net/pronote/"
+                    required
+                    autocomplete="url"
+                >
+            </div>
+
+            <div class="field">
+                <label for="username">Identifiant</label>
+                <input
+                    type="text"
+                    id="username"
+                    name="username"
+                    placeholder="prenom.nom"
+                    required
+                    autocomplete="username"
+                    spellcheck="false"
+                    autocorrect="off"
+                    autocapitalize="off"
+                >
+            </div>
+
+            <div class="field">
+                <label for="password">Mot de passe</label>
+                <input
+                    type="password"
+                    id="password"
+                    name="password"
+                    placeholder="••••••••"
+                    required
+                    autocomplete="current-password"
+                >
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="margin-top:4px">
+                Se connecter
+            </button>
+
+            <div style="font-family:var(--font-mono);font-size:0.7rem;color:var(--text-faint);line-height:1.5">
+                Vos identifiants ne sont jamais stockés. Seul un jeton de session temporaire est conservé.
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+const { getSession, setSession, apiPost, showLoading, hideLoading } = window.ButterflyApp;
+
+if (getSession()?.auth) {
+    window.location.href = "/grades/";
+}
+
+const form = document.getElementById("loginForm");
+const errorEl = document.getElementById("loginError");
+
+function showFormError(msg) {
+    errorEl.textContent = msg;
+    errorEl.style.display = "block";
+}
+
+function hideFormError() {
+    errorEl.style.display = "none";
+}
+
+form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    hideFormError();
+
+    const pronoteURL = document.getElementById("pronoteURL").value.trim();
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value;
+
+    const savedUUID = localStorage.getItem("butterfly_device_uuid") || crypto.randomUUID();
+    localStorage.setItem("butterfly_device_uuid", savedUUID);
+
+    showLoading("Connexion à Pronote…");
+
+    try {
+        const result = await apiPost("/api/login", { pronoteURL, username, password, deviceUUID: savedUUID });
+
+        setSession({
+            auth: result.auth,
+            studentName: result.studentName,
+            schoolName: result.schoolName,
+            periods: result.periods,
+            defaultPeriodId: result.defaultPeriodId,
+            tabs: result.tabs
+        });
+
+        window.location.href = "/grades/";
+    } catch (err) {
+        hideLoading();
+        showFormError(err.message || "Connexion échouée. Vérifiez vos identifiants.");
+    }
+});
+</script>
+</body>
+</html>
