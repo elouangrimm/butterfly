@@ -16,8 +16,11 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "pronoteURL is required" });
     }
 
-    // Normalise trailing slash
-    const base = pronoteURL.replace(/\/$/, "");
+    // Strip to the PRONOTE directory — docs use "https://host/pronote" (no filename).
+    // Input may be "https://host/pronote/eleve.html" or "https://host/pronote/".
+    const base = pronoteURL
+        .replace(/\/[^/]+\.html.*$/, '') // remove /eleve.html (or any .html page)
+        .replace(/\/$/, '');             // remove any leftover trailing slash
     const infoUrl = `${base}/InfoMobileApp.json?id=${INFO_MOBILE_ID}`;
     const mobileUrl = `${base}/mobile.eleve.html?fd=1`;
 
