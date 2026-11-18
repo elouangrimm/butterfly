@@ -2,6 +2,7 @@
 // Bundle with:  npx esbuild background.js --bundle --format=esm --outfile=dist/background.js
 import login from "../api/login.js";
 import loginWebview from "../api/login-webview.js";
+import loginQr from "../api/login-qr.js";
 import overview from "../api/overview.js";
 import timetable from "../api/timetable.js";
 import assignments from "../api/assignments.js";
@@ -9,6 +10,7 @@ import assignments from "../api/assignments.js";
 const ROUTES = {
   "/api/login": login,
   "/api/login-webview": loginWebview,
+  "/api/login-qr": loginQr,
   "/api/overview": overview,
   "/api/timetable": timetable,
   "/api/assignments": assignments,

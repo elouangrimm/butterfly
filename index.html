@@ -14,6 +14,22 @@
     <title>Butterfly — Connexion</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🦋</text></svg>">
     <link rel="stylesheet" href="style.css">
+    <style>
+        .qr-section{border-top:1px solid var(--border-strong);padding:20px 28px;display:flex;flex-direction:column;gap:12px}
+        .qr-label{font-family:var(--font-mono);font-size:0.7rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.07em}
+        #qrPanel{display:flex;flex-direction:column}
+        #qrPanel[hidden]{display:none}
+        .qr-steps{margin:0 0 12px;padding-left:18px;font-family:var(--font-mono);font-size:0.7rem;color:var(--text-faint);line-height:1.6}
+        .qr-drop{border:1px dashed var(--border-strong);padding:18px;text-align:center;cursor:pointer;
+                 font-family:var(--font-mono);font-size:0.75rem;line-height:1.6;color:var(--text-faint);
+                 display:flex;flex-direction:column;align-items:center;gap:10px}
+        .qr-drop:hover,.qr-drop:focus-visible,.qr-drop.drag{border-style:solid;outline:none}
+        .qr-drop img{max-width:100%;max-height:200px;image-rendering:pixelated}
+        .qr-status{font-family:var(--font-mono);font-size:0.72rem;margin-top:8px}
+        .qr-status.ok{color:var(--success, #4ade80)}
+        .qr-error{font-family:var(--font-mono);font-size:0.72rem;margin-bottom:10px;padding:8px 10px;border:1px solid var(--danger, #f87171);color:var(--danger, #f87171)}
+        .qr-hint{font-family:var(--font-mono);font-size:0.68rem;color:var(--text-faint);line-height:1.5;margin-top:10px}
+    </style>
 </head>
 <body>
 
@@ -79,26 +95,53 @@
             </div>
         </form>
 
-        <!-- EduConnect / e-lyco alternative login -->
-        <div style="border-top:1px solid var(--border-strong);padding:20px 28px;display:flex;flex-direction:column;gap:12px">
-            <div style="font-family:var(--font-mono);font-size:0.7rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.07em">
-                Connexion SSO
-            </div>
-            <button
-                class="btn"
-                id="educonnectBtn"
-                style="width:100%;justify-content:center;border-color:var(--border-strong);gap:8px"
-                title="Pour les établissements utilisant e-lyco, EduConnect ou un CAS"
-            >
-                <span>🏫</span> Se connecter via EduConnect / e-lyco
+        <!-- QR code login (works with any SSO: e-lyco, EduConnect, CAS…) -->
+        <div class="qr-section">
+            <div class="qr-label">Connexion par QR code</div>
+            <button type="button" class="btn" id="qrToggle" style="width:100%;justify-content:center;gap:8px" aria-expanded="false" aria-controls="qrPanel">
+                <span>🔳</span> Se connecter avec un QR code
             </button>
-            <div style="font-family:var(--font-mono);font-size:0.68rem;color:var(--text-faint);line-height:1.5">
-                Pour les établissements utilisant un SSO (e-lyco, EduConnect, CAS…). Saisissez l'URL Pronote ci-dessus puis cliquez.
+
+            <div id="qrPanel" hidden>
+                <ol class="qr-steps">
+                    <li>Connectez-vous à Pronote normalement (e-lyco, EduConnect…).</li>
+                    <li>Ouvrez les paramètres et cherchez la section « application mobile » : générez un QR code et choisissez un code PIN à 4 chiffres.</li>
+                    <li>Faites une capture d'écran du QR code et déposez-la ici.</li>
+                </ol>
+
+                <div class="qr-error" id="qrError" role="alert" hidden></div>
+
+                <div class="qr-drop" id="qrDrop" tabindex="0" role="button" aria-label="Déposer, coller ou choisir une capture d'écran du QR code">
+                    <img id="qrPreview" alt="Aperçu du QR code" hidden>
+                    <div id="qrDropText">
+                        Glissez une capture d'écran ici,<br>
+                        <strong>collez-la (Ctrl/⌘ + V)</strong><br>
+                        ou cliquez pour choisir un fichier
+                    </div>
+                    <input type="file" id="qrFile" accept="image/*" hidden>
+                </div>
+
+                <div class="qr-status" id="qrStatus" hidden></div>
+
+                <div class="field" style="margin-top:12px">
+                    <label for="qrPin">Code PIN (4 chiffres)</label>
+                    <input type="password" id="qrPin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4"
+                           placeholder="••••" autocomplete="off" disabled>
+                </div>
+
+                <button type="button" class="btn btn-primary" id="qrSubmit" style="margin-top:12px;width:100%" disabled>
+                    Se connecter
+                </button>
+
+                <div class="qr-hint">
+                    Le QR code est à usage unique et expire rapidement : utilisez-le juste après l'avoir généré.
+                </div>
             </div>
         </div>
     </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
 <script src="app.js"></script>
 <script>
 const { getSession, setSession, apiPost, showLoading, hideLoading } = window.ButterflyApp;
@@ -119,15 +162,175 @@ function hideFormError() {
     errorEl.style.display = "none";
 }
 
-// EduConnect button — reads URL field and redirects to WebView login
-document.getElementById("educonnectBtn").addEventListener("click", () => {
-    const pronoteURL = document.getElementById("pronoteURL").value.trim();
-    if (!pronoteURL) {
-        showFormError("Saisissez d'abord l'URL Pronote de votre établissement.");
-        document.getElementById("pronoteURL").focus();
+// ── QR code login ────────────────────────────────────────────────────────────
+const qrToggle = document.getElementById("qrToggle");
+const qrPanel = document.getElementById("qrPanel");
+const qrDrop = document.getElementById("qrDrop");
+const qrFile = document.getElementById("qrFile");
+const qrPreview = document.getElementById("qrPreview");
+const qrDropText = document.getElementById("qrDropText");
+const qrStatus = document.getElementById("qrStatus");
+const qrErrorEl = document.getElementById("qrError");
+const qrPin = document.getElementById("qrPin");
+const qrSubmit = document.getElementById("qrSubmit");
+
+let qrData = null; // { jeton, login, url } once a QR code has been decoded
+
+function qrShowError(msg) { qrErrorEl.textContent = msg; qrErrorEl.hidden = false; }
+function qrHideError() { qrErrorEl.hidden = true; }
+
+function qrUpdateSubmit() {
+    qrSubmit.disabled = !(qrData && /^\d{4}$/.test(qrPin.value));
+}
+
+function qrReset() {
+    qrData = null;
+    qrPin.value = "";
+    qrPin.disabled = true;
+    qrStatus.hidden = true;
+    qrUpdateSubmit();
+}
+
+qrToggle.addEventListener("click", () => {
+    const open = qrPanel.hidden;
+    qrPanel.hidden = !open;
+    qrToggle.setAttribute("aria-expanded", String(open));
+});
+
+// Decode a QR code from an image, retrying at several scales
+function decodeQRFromImage(img) {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    const MAX_SIDE = 2200;
+    for (const scale of [1, 0.5, 0.25]) {
+        let w = img.naturalWidth * scale;
+        let h = img.naturalHeight * scale;
+        const k = Math.min(1, MAX_SIDE / Math.max(w, h));
+        w = Math.max(1, Math.round(w * k));
+        h = Math.max(1, Math.round(h * k));
+        canvas.width = w;
+        canvas.height = h;
+        ctx.drawImage(img, 0, 0, w, h);
+        const px = ctx.getImageData(0, 0, w, h);
+        const code = jsQR(px.data, w, h, { inversionAttempts: "attemptBoth" });
+        if (code) return code.data;
+    }
+    return null;
+}
+
+function parseQRPayload(text) {
+    let obj;
+    try { obj = JSON.parse(text); } catch { return null; }
+    if (!obj || typeof obj.jeton !== "string" || typeof obj.login !== "string" || typeof obj.url !== "string") return null;
+    try {
+        if (new URL(obj.url).protocol !== "https:") return null;
+    } catch { return null; }
+    return { jeton: obj.jeton, login: obj.login, url: obj.url };
+}
+
+function handleQRImageFile(file) {
+    qrHideError();
+    qrReset();
+    if (!file || !file.type.startsWith("image/")) {
+        qrShowError("Ce fichier n'est pas une image.");
         return;
     }
-    window.location.href = "/login-webview/?pronoteURL=" + encodeURIComponent(pronoteURL);
+    const objUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+        qrPreview.src = objUrl;
+        qrPreview.hidden = false;
+        qrDropText.textContent = "Cliquez ou déposez une autre image pour remplacer";
+
+        const text = decodeQRFromImage(img);
+        if (!text) {
+            qrShowError("Aucun QR code détecté. Recadrez la capture sur le QR code (bien net, sans reflets) et réessayez.");
+            return;
+        }
+        const parsed = parseQRPayload(text);
+        if (!parsed) {
+            qrShowError("Ce QR code n'est pas un QR code Pronote (celui de l'application mobile).");
+            return;
+        }
+        qrData = parsed;
+        qrStatus.textContent = "✓ QR code Pronote détecté — " + new URL(parsed.url).host;
+        qrStatus.className = "qr-status ok";
+        qrStatus.hidden = false;
+        qrPin.disabled = false;
+        qrPin.focus();
+        qrUpdateSubmit();
+    };
+    img.onerror = () => {
+        URL.revokeObjectURL(objUrl);
+        qrShowError("Impossible de lire cette image.");
+    };
+    img.src = objUrl;
+}
+
+// Click / keyboard to pick a file
+qrDrop.addEventListener("click", () => qrFile.click());
+qrDrop.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); qrFile.click(); }
+});
+qrFile.addEventListener("change", () => {
+    if (qrFile.files[0]) handleQRImageFile(qrFile.files[0]);
+    qrFile.value = "";
+});
+
+// Drag & drop
+["dragenter", "dragover"].forEach((ev) =>
+    qrDrop.addEventListener(ev, (e) => { e.preventDefault(); qrDrop.classList.add("drag"); }));
+["dragleave", "drop"].forEach((ev) =>
+    qrDrop.addEventListener(ev, (e) => { e.preventDefault(); qrDrop.classList.remove("drag"); }));
+qrDrop.addEventListener("drop", (e) => {
+    const file = [...(e.dataTransfer?.files ?? [])].find((f) => f.type.startsWith("image/"));
+    if (file) handleQRImageFile(file);
+    else qrShowError("Déposez une image (capture d'écran du QR code).");
+});
+
+// Paste (Ctrl/⌘ + V) anywhere on the page while the panel is open
+document.addEventListener("paste", (e) => {
+    if (qrPanel.hidden) return;
+    const item = [...(e.clipboardData?.items ?? [])].find((i) => i.type.startsWith("image/"));
+    if (!item) return;
+    e.preventDefault();
+    handleQRImageFile(item.getAsFile());
+});
+
+qrPin.addEventListener("input", () => {
+    qrPin.value = qrPin.value.replace(/\D/g, "").slice(0, 4);
+    qrUpdateSubmit();
+});
+qrPin.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !qrSubmit.disabled) qrSubmit.click();
+});
+
+qrSubmit.addEventListener("click", async () => {
+    if (!qrData) return;
+    qrHideError();
+
+    const savedUUID = localStorage.getItem("butterfly_device_uuid") || crypto.randomUUID();
+    localStorage.setItem("butterfly_device_uuid", savedUUID);
+
+    showLoading("Connexion à Pronote…");
+    try {
+        const result = await apiPost("/api/login-qr", { qr: qrData, pin: qrPin.value, deviceUUID: savedUUID });
+
+        setSession({
+            auth: result.auth,
+            studentName: result.studentName,
+            schoolName: result.schoolName,
+            periods: result.periods,
+            defaultPeriodId: result.defaultPeriodId,
+            tabs: result.tabs
+        });
+
+        window.location.href = "/grades/";
+    } catch (err) {
+        hideLoading();
+        // The QR is single-use: after a failed attempt the user probably needs a fresh one
+        qrShowError((err.message || "Connexion échouée.") + " Générez un nouveau QR code si le problème persiste.");
+    }
 });
 
 form.addEventListener("submit", async (e) => {
