@@ -126,7 +126,7 @@
                 <div class="field" style="margin-top:12px">
                     <label for="qrPin">Code PIN (4 chiffres)</label>
                     <input type="password" id="qrPin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4"
-                           placeholder="••••" autocomplete="off" disabled>
+                           placeholder="••••" autocomplete="off">
                 </div>
 
                 <button type="button" class="btn btn-primary" id="qrSubmit" style="margin-top:12px;width:100%" disabled>
@@ -141,7 +141,8 @@
     </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script>window.jsQR || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"><\/script>');</script>
 <script src="app.js"></script>
 <script>
 const { getSession, setSession, apiPost, showLoading, hideLoading } = window.ButterflyApp;
@@ -186,7 +187,6 @@ function qrUpdateSubmit() {
 function qrReset() {
     qrData = null;
     qrPin.value = "";
-    qrPin.disabled = true;
     qrStatus.hidden = true;
     qrUpdateSubmit();
 }
@@ -199,6 +199,7 @@ qrToggle.addEventListener("click", () => {
 
 // Decode a QR code from an image, retrying at several scales
 function decodeQRFromImage(img) {
+    if (typeof jsQR !== "function") throw new Error("LIB_MISSING");
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     const MAX_SIDE = 2200;
@@ -242,7 +243,15 @@ function handleQRImageFile(file) {
         qrPreview.hidden = false;
         qrDropText.textContent = "Cliquez ou déposez une autre image pour remplacer";
 
-        const text = decodeQRFromImage(img);
+        let text;
+        try {
+            text = decodeQRFromImage(img);
+        } catch (err) {
+            qrShowError(err.message === "LIB_MISSING"
+                ? "La bibliothèque de lecture des QR codes n'a pas pu être chargée (réseau ou bloqueur de pubs ?). Rechargez la page."
+                : "Erreur lors de la lecture de l'image.");
+            return;
+        }
         if (!text) {
             qrShowError("Aucun QR code détecté. Recadrez la capture sur le QR code (bien net, sans reflets) et réessayez.");
             return;
@@ -256,7 +265,6 @@ function handleQRImageFile(file) {
         qrStatus.textContent = "✓ QR code Pronote détecté — " + new URL(parsed.url).host;
         qrStatus.className = "qr-status ok";
         qrStatus.hidden = false;
-        qrPin.disabled = false;
         qrPin.focus();
         qrUpdateSubmit();
     };
