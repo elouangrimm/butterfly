@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Butterfly Bridge",
+  "version": "0.1.0",
+  "description": "Lets the Butterfly web app talk to Pronote directly from your browser. Your credentials and tokens never leave your machine.",
+  "background": { "service_worker": "dist/background.js", "type": "module" },
+  "host_permissions": [
+    "https://*/pronote/*",
+    "https://*.index-education.net/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://butterfly-elouang.vercel.app/*", "http://localhost:3000/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

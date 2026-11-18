@@ -33,7 +33,34 @@ function requireAuth() {
     return session;
 }
 
+const EXT_ENDPOINTS = new Set([
+    "/api/login", "/api/login-webview", "/api/overview",
+    "/api/timetable", "/api/assignments"
+]);
+
+const hasExtension = () => document.documentElement.dataset.butterflyExt === "1";
+
+function extCall(endpoint, body) {
+    return new Promise((resolve, reject) => {
+        const id = crypto.randomUUID();
+        const timer = setTimeout(() => {
+            window.removeEventListener("message", onMsg);
+            reject(new Error("L'extension Butterfly ne répond pas."));
+        }, 30000);
+        function onMsg(e) {
+            if (e.source !== window || e.data?.source !== "butterfly-ext" || e.data.id !== id) return;
+            clearTimeout(timer);
+            window.removeEventListener("message", onMsg);
+            if (e.data.status >= 400) reject(new Error(e.data.data?.error || `HTTP ${e.data.status}`));
+            else resolve(e.data.data);
+        }
+        window.addEventListener("message", onMsg);
+        window.postMessage({ source: "butterfly-page", id, endpoint, body }, window.location.origin);
+    });
+}
+
 async function apiPost(endpoint, body) {
+    if (hasExtension() && EXT_ENDPOINTS.has(endpoint)) return extCall(endpoint, body);
     const res = await fetch(API_BASE + endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -43,6 +70,7 @@ async function apiPost(endpoint, body) {
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     return data;
 }
+
 
 function subjectColor(name) {
     if (!name) return "#78716c";
